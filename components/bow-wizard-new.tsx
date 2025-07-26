@@ -45,28 +45,28 @@ const quickRibbons = availableRibbons.slice(0, 6).map(ribbon => ({
 }))
 
 const bowWizardSchema = z.object({
-  name: z.string().min(1, "Bow name is required"),
+  name: z.string().min(1, "Bow name is required").max(100, "Name must be less than 100 characters"),
   description: z.string().optional(),
   image: z.string().optional(),
   recipe: z.string().optional(),
   layers: z.array(z.object({
-    ribbonId: z.string(),
-    ribbonName: z.string(),
-    color: z.string(),
+    ribbonId: z.string().min(1, "Ribbon selection is required"),
+    ribbonName: z.string().min(1, "Ribbon name is required"),
+    color: z.string().min(1, "Color is required"),
     loops: z.array(z.object({
-      quantity: z.number().min(0),
-      length: z.number().min(0),
+      quantity: z.number().min(0, "Quantity must be 0 or greater"),
+      length: z.number().min(0, "Length must be 0 or greater"),
     })),
     tails: z.array(z.object({
-      quantity: z.number().min(0),
-      length: z.number().min(0),
+      quantity: z.number().min(0, "Quantity must be 0 or greater"),
+      length: z.number().min(0, "Length must be 0 or greater"),
     })),
     streamers: z.array(z.object({
-      quantity: z.number().min(0),
-      length: z.number().min(0),
+      quantity: z.number().min(0, "Quantity must be 0 or greater"),
+      length: z.number().min(0, "Length must be 0 or greater"),
     })),
   })),
-  targetPrice: z.number().min(0),
+  targetPrice: z.number().min(0, "Target price must be 0 or greater"),
 })
 
 type BowWizardFormValues = z.infer<typeof bowWizardSchema>
@@ -91,6 +91,7 @@ export function BowWizard({ onComplete }: BowWizardProps) {
       layers: [],
       targetPrice: 0,
     },
+    mode: "onChange",
   })
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -358,13 +359,13 @@ export function BowWizard({ onComplete }: BowWizardProps) {
 
       <div>
         <h3 className="text-lg font-semibold mb-4">Add Image (Optional)</h3>
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+        <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
           {imagePreview ? (
             <div className="space-y-4">
               <img 
                 src={imagePreview} 
                 alt="Preview" 
-                className="mx-auto max-h-48 rounded-lg"
+                className="mx-auto max-h-48 rounded-lg object-cover"
               />
               <Button variant="outline" onClick={removeImage}>
                 <X className="h-4 w-4 mr-2" />
@@ -373,8 +374,8 @@ export function BowWizard({ onComplete }: BowWizardProps) {
             </div>
           ) : (
             <div>
-              <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <p className="text-sm text-gray-600 mb-4">
+              <Upload className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+              <p className="text-sm text-muted-foreground mb-4">
                 Upload an image of your bow design
               </p>
               <input
@@ -419,26 +420,30 @@ export function BowWizard({ onComplete }: BowWizardProps) {
           {bowRecipes.map((recipe) => (
             <Card 
               key={recipe.id} 
-              className={`cursor-pointer transition-all ${
+              className={`cursor-pointer transition-all hover:shadow-md ${
                 selectedRecipe === recipe.id 
-                  ? "ring-2 ring-primary" 
-                  : "hover:shadow-md"
+                  ? "ring-2 ring-primary border-primary" 
+                  : "border-border"
               }`}
               onClick={() => selectRecipe(recipe.id)}
             >
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium">{recipe.name}</h4>
-                  <Badge variant="outline">{recipe.difficulty}</Badge>
+                  <h4 className="font-medium text-foreground">{recipe.name}</h4>
+                  <Badge 
+                    variant={recipe.difficulty === "Easy" ? "default" : recipe.difficulty === "Medium" ? "secondary" : "destructive"}
+                  >
+                    {recipe.difficulty}
+                  </Badge>
                 </div>
-                <p className="text-sm text-muted-foreground mb-2">
+                <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
                   {recipe.description}
                 </p>
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
                   <span>{recipe.estimatedTime}</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm mt-2">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                   <Package className="h-4 w-4" />
                   <span>{recipe.layers.length} layers</span>
                 </div>
@@ -478,9 +483,13 @@ export function BowWizard({ onComplete }: BowWizardProps) {
         </div>
 
         {layers.length === 0 ? (
-          <div className="text-center py-8">
-            <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No layers added yet. Add your first layer to get started.</p>
+          <div className="text-center py-12">
+            <Package className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
+            <p className="text-muted-foreground mb-4">No layers added yet. Add your first layer to get started.</p>
+            <Button onClick={addLayer} variant="outline" className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add First Layer
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -502,7 +511,7 @@ export function BowWizard({ onComplete }: BowWizardProps) {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="text-sm font-medium">Ribbon Selection</label>
+                    <FormLabel className="text-sm font-medium">Ribbon Selection</FormLabel>
                     <Select 
                       value={layer.ribbonId} 
                       onValueChange={(value) => {
@@ -527,13 +536,13 @@ export function BowWizard({ onComplete }: BowWizardProps) {
                     </Select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Color</label>
+                    <FormLabel className="text-sm font-medium">Color</FormLabel>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
                         value={layer.color}
                         onChange={(e) => form.setValue(`layers.${index}.color`, e.target.value)}
-                        className="w-10 h-10 rounded border"
+                        className="w-10 h-10 rounded border border-input bg-background"
                       />
                       <Input
                         value={layer.color}
@@ -546,66 +555,78 @@ export function BowWizard({ onComplete }: BowWizardProps) {
 
                 <div className="grid gap-4 sm:grid-cols-2 mt-4">
                   <div>
-                    <label className="text-sm font-medium">Loops</label>
+                    <FormLabel className="text-sm font-medium">Loops</FormLabel>
                     <div className="space-y-2">
                       {layer.loops.map((loop, loopIndex) => (
                         <div key={loopIndex} className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            value={loop.quantity}
-                            onChange={(e) => {
-                              const newLoops = [...layer.loops]
-                              newLoops[loopIndex] = { ...loop, quantity: parseInt(e.target.value) || 0 }
-                              form.setValue(`layers.${index}.loops`, newLoops)
-                            }}
-                            placeholder="Qty"
-                            className="w-20"
-                          />
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={loop.quantity}
+                              onChange={(e) => {
+                                const newLoops = [...layer.loops]
+                                newLoops[loopIndex] = { ...loop, quantity: parseInt(e.target.value) || 0 }
+                                form.setValue(`layers.${index}.loops`, newLoops)
+                              }}
+                              placeholder="Qty"
+                              className="w-20"
+                            />
+                          </FormControl>
                           <span className="text-sm text-muted-foreground">×</span>
-                          <Input
-                            type="number"
-                            value={loop.length}
-                            onChange={(e) => {
-                              const newLoops = [...layer.loops]
-                              newLoops[loopIndex] = { ...loop, length: parseInt(e.target.value) || 0 }
-                              form.setValue(`layers.${index}.loops`, newLoops)
-                            }}
-                            placeholder="Length"
-                            className="w-20"
-                          />
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={loop.length}
+                              onChange={(e) => {
+                                const newLoops = [...layer.loops]
+                                newLoops[loopIndex] = { ...loop, length: parseInt(e.target.value) || 0 }
+                                form.setValue(`layers.${index}.loops`, newLoops)
+                              }}
+                              placeholder="Length"
+                              className="w-20"
+                            />
+                          </FormControl>
                           <span className="text-sm text-muted-foreground">inches</span>
                         </div>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Tails</label>
+                    <FormLabel className="text-sm font-medium">Tails</FormLabel>
                     <div className="space-y-2">
                       {layer.tails.map((tail, tailIndex) => (
                         <div key={tailIndex} className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            value={tail.quantity}
-                            onChange={(e) => {
-                              const newTails = [...layer.tails]
-                              newTails[tailIndex] = { ...tail, quantity: parseInt(e.target.value) || 0 }
-                              form.setValue(`layers.${index}.tails`, newTails)
-                            }}
-                            placeholder="Qty"
-                            className="w-20"
-                          />
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={tail.quantity}
+                              onChange={(e) => {
+                                const newTails = [...layer.tails]
+                                newTails[tailIndex] = { ...tail, quantity: parseInt(e.target.value) || 0 }
+                                form.setValue(`layers.${index}.tails`, newTails)
+                              }}
+                              placeholder="Qty"
+                              className="w-20"
+                            />
+                          </FormControl>
                           <span className="text-sm text-muted-foreground">×</span>
-                          <Input
-                            type="number"
-                            value={tail.length}
-                            onChange={(e) => {
-                              const newTails = [...layer.tails]
-                              newTails[tailIndex] = { ...tail, length: parseInt(e.target.value) || 0 }
-                              form.setValue(`layers.${index}.tails`, newTails)
-                            }}
-                            placeholder="Length"
-                            className="w-20"
-                          />
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={tail.length}
+                              onChange={(e) => {
+                                const newTails = [...layer.tails]
+                                newTails[tailIndex] = { ...tail, length: parseInt(e.target.value) || 0 }
+                                form.setValue(`layers.${index}.tails`, newTails)
+                              }}
+                              placeholder="Length"
+                              className="w-20"
+                            />
+                          </FormControl>
                           <span className="text-sm text-muted-foreground">inches</span>
                         </div>
                       ))}
@@ -686,6 +707,7 @@ export function BowWizard({ onComplete }: BowWizardProps) {
                           <Input 
                             type="number" 
                             step="0.01" 
+                            min="0"
                             placeholder="0.00" 
                             {...field}
                             onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
@@ -821,6 +843,7 @@ export function BowWizard({ onComplete }: BowWizardProps) {
                       type="button"
                       onClick={nextStep}
                       className="gap-2"
+                      disabled={currentStep === 1 && !form.getValues("name")}
                     >
                       Next
                       <ArrowRight className="h-4 w-4" />
@@ -830,6 +853,7 @@ export function BowWizard({ onComplete }: BowWizardProps) {
                       type="button"
                       onClick={handleComplete}
                       className="gap-2"
+                      disabled={!form.getValues("name") || form.getValues("layers").length === 0}
                     >
                       <CheckCircle className="h-4 w-4" />
                       Create Bow
