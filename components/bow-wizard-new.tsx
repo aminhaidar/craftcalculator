@@ -94,10 +94,15 @@ export function BowWizard({ onComplete }: BowWizardProps) {
   })
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("Image upload triggered", event.target.files)
+    
     const file = event.target.files?.[0]
     if (file) {
+      console.log("File selected:", file.name, file.type, file.size)
+      
       // Validate file type
       if (!file.type.startsWith('image/')) {
+        console.error("Invalid file type:", file.type)
         toast({
           title: "Invalid file type",
           description: "Please select an image file (JPG, PNG, GIF, etc.).",
@@ -108,6 +113,7 @@ export function BowWizard({ onComplete }: BowWizardProps) {
 
       // Validate file size (5MB limit)
       if (file.size > 5 * 1024 * 1024) {
+        console.error("File too large:", file.size)
         toast({
           title: "File too large",
           description: "Please select an image smaller than 5MB.",
@@ -120,13 +126,22 @@ export function BowWizard({ onComplete }: BowWizardProps) {
       
       reader.onload = (e) => {
         try {
+          console.log("File read successfully")
           const result = e.target?.result as string
           if (result) {
+            console.log("Setting image preview and form value")
             setImagePreview(result)
             form.setValue("image", result)
             toast({
               title: "Image uploaded successfully",
               description: "Your image has been added to the bow design.",
+            })
+          } else {
+            console.error("No result from FileReader")
+            toast({
+              title: "Upload failed",
+              description: "No image data received. Please try again.",
+              variant: "destructive",
             })
           }
         } catch (error) {
@@ -139,7 +154,8 @@ export function BowWizard({ onComplete }: BowWizardProps) {
         }
       }
 
-      reader.onerror = () => {
+      reader.onerror = (error) => {
+        console.error("FileReader error:", error)
         toast({
           title: "Upload failed",
           description: "There was an error reading your image file. Please try again.",
@@ -147,16 +163,33 @@ export function BowWizard({ onComplete }: BowWizardProps) {
         })
       }
 
+      reader.onabort = () => {
+        console.log("FileReader aborted")
+        toast({
+          title: "Upload cancelled",
+          description: "Image upload was cancelled.",
+          variant: "destructive",
+        })
+      }
+
+      console.log("Starting to read file as DataURL")
       reader.readAsDataURL(file)
+    } else {
+      console.log("No file selected")
     }
   }
 
   const removeImage = () => {
+    console.log("Removing image")
     setImagePreview("")
     form.setValue("image", "")
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
+    toast({
+      title: "Image removed",
+      description: "The image has been removed from your bow design.",
+    })
   }
 
   const selectRecipe = (recipeId: string) => {
@@ -354,7 +387,15 @@ export function BowWizard({ onComplete }: BowWizardProps) {
               <Button 
                 type="button"
                 variant="outline" 
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  console.log("Choose Image button clicked")
+                  console.log("fileInputRef.current:", fileInputRef.current)
+                  if (fileInputRef.current) {
+                    fileInputRef.current.click()
+                  } else {
+                    console.error("File input ref is null")
+                  }
+                }}
               >
                 <Camera className="h-4 w-4 mr-2" />
                 Choose Image
