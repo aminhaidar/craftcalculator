@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Ribbon {
+  id              String        @id @default(cuid())
+  ribbonType      String
+  material        String
+  wired           Boolean       @default(false)
+  widthInches     Float
+  rollLengthYards Int
+  designType      String
+  theme           String?
+  colors          String[]
+  availability    String        @default("In stock")
+  brand           String?
+  costPerYard     Float?
+  supplier        String?
+  lastOrdered     DateTime?
+  inStock         Int?
+  minStock        Int?
+  maxStock        Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  bowMaterials    BowMaterial[]
+  recipeLayers    RecipeLayer[]
+
+  @@map("ribbons")
+}
+
+model Recipe {
+  id            String        @id @default(cuid())
+  name          String
+  description   String?
+  category      String
+  difficulty    String
+  estimatedTime String
+  tags          String[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  bows          Bow[]
+  layers        RecipeLayer[]
+
+  @@map("recipes")
+}
+
+model RecipeLayer {
+  id        String @id @default(cuid())
+  recipeId  String
+  ribbonId  String
+  color     String
+  loops     Json
+  tails     Json
+  streamers Json
+  order     Int
+  recipe    Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ribbon    Ribbon @relation(fields: [ribbonId], references: [id], onDelete: Cascade)
+
+  @@map("recipe_layers")
+}
+
+model Bow {
+  id           String        @id @default(cuid())
+  name         String
+  description  String?
+  image        String?
+  totalCost    Float
+  targetPrice  Float
+  profit       Float
+  profitMargin Float
+  status       String
+  timeToMake   String
+  difficulty   String
+  category     String
+  tags         String[]
+  layers       Int
+  recipeId     String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  materials    BowMaterial[]
+  recipe       Recipe?       @relation(fields: [recipeId], references: [id])
+  salesHistory Sale[]
+
+  @@map("bows")
+}
+
+model BowMaterial {
+  id       String @id @default(cuid())
+  bowId    String
+  ribbonId String
+  name     String
+  quantity String
+  cost     Float
+  bow      Bow    @relation(fields: [bowId], references: [id], onDelete: Cascade)
+  ribbon   Ribbon @relation(fields: [ribbonId], references: [id], onDelete: Cascade)
+
+  @@map("bow_materials")
+}
+
+model Sale {
+  id       String   @id @default(cuid())
+  bowId    String
+  quantity Int      @default(1)
+  price    Float
+  soldAt   DateTime @default(now())
+  customer String?
+  notes    String?
+  bow      Bow      @relation(fields: [bowId], references: [id], onDelete: Cascade)
+
+  @@map("sales")
+}
