@@ -1,0 +1,24 @@
+databases:
+  - name: ribbon-calculator-db
+    databaseName: ribbon_calculator
+    user: ribbon_calculator_user
+    plan: free
+
+services:
+  - type: web
+    name: ribbon-calculator
+    env: node
+    plan: free
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ribbon-calculator-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
+      - key: NEXTAUTH_SECRET
+        generateValue: true
+      - key: NEXTAUTH_URL
+        value: https://ribbon-calculator.onrender.com 
