@@ -96,6 +96,17 @@ export function BowWizard({ onComplete }: BowWizardProps) {
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Invalid file type",
+          description: "Please select an image file (JPG, PNG, GIF, etc.).",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Validate file size (5MB limit)
       if (file.size > 5 * 1024 * 1024) {
         toast({
           title: "File too large",
@@ -106,11 +117,36 @@ export function BowWizard({ onComplete }: BowWizardProps) {
       }
 
       const reader = new FileReader()
+      
       reader.onload = (e) => {
-        const result = e.target?.result as string
-        setImagePreview(result)
-        form.setValue("image", result)
+        try {
+          const result = e.target?.result as string
+          if (result) {
+            setImagePreview(result)
+            form.setValue("image", result)
+            toast({
+              title: "Image uploaded successfully",
+              description: "Your image has been added to the bow design.",
+            })
+          }
+        } catch (error) {
+          console.error("Error processing image:", error)
+          toast({
+            title: "Upload failed",
+            description: "There was an error processing your image. Please try again.",
+            variant: "destructive",
+          })
+        }
       }
+
+      reader.onerror = () => {
+        toast({
+          title: "Upload failed",
+          description: "There was an error reading your image file. Please try again.",
+          variant: "destructive",
+        })
+      }
+
       reader.readAsDataURL(file)
     }
   }
@@ -316,6 +352,7 @@ export function BowWizard({ onComplete }: BowWizardProps) {
                 className="hidden"
               />
               <Button 
+                type="button"
                 variant="outline" 
                 onClick={() => fileInputRef.current?.click()}
               >

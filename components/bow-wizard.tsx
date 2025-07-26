@@ -95,6 +95,17 @@ export function BowWizard({ onComplete }: BowWizardProps) {
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Invalid file type",
+          description: "Please select an image file (JPG, PNG, GIF, etc.).",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Validate file size (5MB limit)
       if (file.size > 5 * 1024 * 1024) {
         toast({
           title: "File too large",
@@ -105,11 +116,36 @@ export function BowWizard({ onComplete }: BowWizardProps) {
       }
 
       const reader = new FileReader()
+      
       reader.onload = (e) => {
-        const result = e.target?.result as string
-        setImagePreview(result)
-        form.setValue("image", result)
+        try {
+          const result = e.target?.result as string
+          if (result) {
+            setImagePreview(result)
+            form.setValue("image", result)
+            toast({
+              title: "Image uploaded successfully",
+              description: "Your image has been added to the bow design.",
+            })
+          }
+        } catch (error) {
+          console.error("Error processing image:", error)
+          toast({
+            title: "Upload failed",
+            description: "There was an error processing your image. Please try again.",
+            variant: "destructive",
+          })
+        }
       }
+
+      reader.onerror = () => {
+        toast({
+          title: "Upload failed",
+          description: "There was an error reading your image file. Please try again.",
+          variant: "destructive",
+        })
+      }
+
       reader.readAsDataURL(file)
     }
   }
@@ -548,7 +584,7 @@ export function BowWizard({ onComplete }: BowWizardProps) {
                                                     ribbonId: ribbon.id,
                                                     ribbonName: ribbon.name,
                                                     color: ribbon.color,
-                                                    costPerInch: ribbon.costPerInch,
+                                                    // costPerInch will be calculated from ribbon data
                                                   }
                                                   form.setValue("layers", newLayers)
                                                 }
@@ -604,7 +640,10 @@ export function BowWizard({ onComplete }: BowWizardProps) {
                                       const loopsInches = layer.loops.reduce((sum, l) => sum + l.quantity * l.length, 0)
                                       const tailsInches = layer.tails.reduce((sum, t) => sum + t.quantity * t.length, 0)
                                       const totalInches = loopsInches + tailsInches
-                                      const layerCost = totalInches * layer.costPerInch
+                                      const ribbon = availableRibbons.find(r => r.ribbonId === layer.ribbonId)
+                                      const costPerYard = ribbon?.costPerYard || 0
+                                      const costPerInch = costPerYard / 36
+                                      const layerCost = totalInches * costPerInch
                                       
                                       return (
                                         <div key={index} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
@@ -623,7 +662,7 @@ export function BowWizard({ onComplete }: BowWizardProps) {
                                           <div className="text-right">
                                             <div className="font-semibold">${layerCost.toFixed(2)}</div>
                                             <div className="text-xs text-muted-foreground">
-                                              ${layer.costPerInch.toFixed(3)}/inch
+                                              ${costPerInch.toFixed(3)}/inch
                                             </div>
                                           </div>
                                         </div>
@@ -637,7 +676,10 @@ export function BowWizard({ onComplete }: BowWizardProps) {
                                       ${(form.watch("layers").reduce((sum, layer) => {
                                         const loopsInches = layer.loops.reduce((s, l) => s + l.quantity * l.length, 0)
                                         const tailsInches = layer.tails.reduce((s, t) => s + t.quantity * t.length, 0)
-                                        return sum + (loopsInches + tailsInches) * layer.costPerInch
+                                        const ribbon = availableRibbons.find(r => r.ribbonId === layer.ribbonId)
+                                        const costPerYard = ribbon?.costPerYard || 0
+                                        const costPerInch = costPerYard / 36
+                                        return sum + (loopsInches + tailsInches) * costPerInch
                                       }, 0)).toFixed(2)}
                                     </span>
                                   </div>
