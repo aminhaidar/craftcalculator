@@ -29,7 +29,8 @@ import {
   Palette, 
   Menu,
   Plus,
-  Home
+  Home,
+  Gift
 } from "lucide-react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
@@ -40,6 +41,7 @@ export function Header() {
 
   const navigation = [
     { name: "Home", href: "/", icon: Home },
+    { name: "Bows", href: "/bows", icon: Gift },
     { name: "Inventory", href: "/inventory", icon: Package },
     { name: "Recipes", href: "/recipes", icon: Palette },
   ]
