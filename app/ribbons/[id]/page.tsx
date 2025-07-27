@@ -9,7 +9,8 @@ interface RibbonDetailPageProps {
 
 export default async function RibbonDetailPageRoute({ params }: RibbonDetailPageProps) {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/ribbons/${params.id}`, {
+    const { id } = await params
+    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/ribbons/${id}`, {
       cache: 'no-store'
     })
     

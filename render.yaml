@@ -13,4 +13,8 @@ services:
       - key: NEXTAUTH_SECRET
         generateValue: true
       - key: NEXTAUTH_URL
-        value: https://ribbon-calculator.onrender.com 
+        value: https://ribbon-calculator.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://ribbon-calculator.onrender.com
+    healthCheckPath: /
+    autoDeploy: true 

@@ -6,7 +6,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const ribbon = await RibbonService.getRibbonById(params.id)
+    const { id } = await params
+    const ribbon = await RibbonService.getRibbonById(id)
     
     if (!ribbon) {
       return NextResponse.json(
@@ -30,9 +31,10 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const { id } = await params
     const body = await request.json()
     const ribbon = await RibbonService.updateRibbon({
-      id: params.id,
+      id: id,
       ...body
     })
     return NextResponse.json(ribbon)
@@ -50,7 +52,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await RibbonService.deleteRibbon(params.id)
+    const { id } = await params
+    await RibbonService.deleteRibbon(id)
     return NextResponse.json({ message: 'Ribbon deleted successfully' })
   } catch (error) {
     console.error('Error deleting ribbon:', error)

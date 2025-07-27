@@ -125,10 +125,10 @@ export function Header() {
 
         {/* Desktop Actions */}
         <div className="hidden md:flex items-center space-x-2 ml-auto">
-          <Link href="/bow/new">
+          <Link href="/">
             <Button size="sm" className="gap-2">
               <Plus className="h-4 w-4" />
-              New Bow
+              Calculator
             </Button>
           </Link>
           <ModeToggle />
@@ -168,10 +168,10 @@ export function Header() {
 
         {/* Mobile Actions */}
         <div className="md:hidden flex items-center space-x-2 ml-2">
-          <Link href="/bow/new">
+          <Link href="/">
             <Button size="sm" className="gap-2">
               <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">New Bow</span>
+              <span className="hidden sm:inline">Calculator</span>
             </Button>
           </Link>
           <ModeToggle />
