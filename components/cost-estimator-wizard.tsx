@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
 import { 
   Calculator, 
   DollarSign, 
@@ -24,9 +25,13 @@ import {
   TrendingUp,
   CheckCircle,
   Package,
-  Scissors
+  Scissors,
+  Save,
+  BookOpen
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { calculateTotalCost, calculateYardsUsed, calculateRibbonUsageSummary, type CostBreakdown } from "@/lib/services/cost-calculator"
+import { VendorOptions, ColorOptions } from "@/lib/vendor-data"
 
 const RIBBON_TYPES = [
   "Satin",
@@ -68,6 +73,7 @@ interface BowLayer {
   totalInches: number
   yardsUsed: number
   totalCost: number
+  color: string
 }
 
 interface CostEstimate {
@@ -95,8 +101,18 @@ export function CostEstimatorWizard() {
   const [showConfetti, setShowConfetti] = useState(false)
   const [showSummaryAnimation, setShowSummaryAnimation] = useState(false)
   const [stepDirection, setStepDirection] = useState<'forward' | 'backward'>('forward')
+  
+  // New state for enhanced features
+  const [showCostBreakdown, setShowCostBreakdown] = useState(false)
+  const [selectedVendor, setSelectedVendor] = useState<string>('')
+  const [vendorFeePct, setVendorFeePct] = useState(0.07)
+  const [taxPct, setTaxPct] = useState(0.08)
+  const [shippingCost, setShippingCost] = useState(5.95)
+  const [bowName, setBowName] = useState('')
+  const [recipeName, setRecipeName] = useState('')
+  const [priceSlider, setPriceSlider] = useState(0)
 
-  const totalSteps = 3
+  const totalSteps = 4
 
   const addLayer = () => {
     const newLayer: BowLayer = {
@@ -111,7 +127,8 @@ export function CostEstimatorWizard() {
       streamerLength: 0,
       totalInches: 0,
       yardsUsed: 0,
-      totalCost: 0
+      totalCost: 0,
+      color: "#ef4444" // Default red color
     }
     setLayers([...layers, newLayer])
     setExpandedLayers(new Set([newLayer.id]))
@@ -143,10 +160,15 @@ export function CostEstimatorWizard() {
           updatedLayer.costPerYard = updatedLayer.ribbonYards > 0 ? updatedLayer.ribbonCost / updatedLayer.ribbonYards : 0
         }
         
-        // Calculate total inches and yards used
+        // Calculate total inches and yards used using the new service
         const totalInches = (updatedLayer.loops * updatedLayer.loopLength) + 
                            (updatedLayer.streamers * updatedLayer.streamerLength)
-        const yardsUsed = totalInches / 36 // Convert inches to yards
+        const yardsUsed = calculateYardsUsed(
+          updatedLayer.loops,
+          updatedLayer.loopLength,
+          updatedLayer.streamers,
+          updatedLayer.streamerLength
+        )
         
         // Calculate total cost
         const totalCost = yardsUsed * updatedLayer.costPerYard
@@ -242,24 +264,28 @@ export function CostEstimatorWizard() {
       return
     }
 
-    const totalCost = getTotalBowCost()
+    const baseCost = getTotalBowCost()
     const totalInches = getTotalInches()
     
-    // Calculate multiple pricing strategies
-    const conservativePrice = totalCost * 2.0 // 50% markup
-    const recommendedPrice = totalCost * 2.5 // 60% markup  
-    const premiumPrice = totalCost * 3.0 // 67% markup
+    // Calculate cost breakdown including vendor fees and shipping
+    const costBreakdown = getCostBreakdown()
+    const totalCostWithFees = costBreakdown.total
+    
+    // Calculate multiple pricing strategies factoring in vendor fees
+    const conservativePrice = totalCostWithFees * 2.0 // 50% markup
+    const recommendedPrice = totalCostWithFees * 2.5 // 60% markup  
+    const premiumPrice = totalCostWithFees * 3.0 // 67% markup
     
     // Use recommended price as default
     const suggestedPrice = recommendedPrice
-    const profitMargin = ((suggestedPrice - totalCost) / suggestedPrice) * 100
+    const profitMargin = ((suggestedPrice - totalCostWithFees) / suggestedPrice) * 100
     
     // Calculate bows per roll more accurately
     const totalYardsUsed = layers.reduce((sum, layer) => sum + layer.yardsUsed, 0)
     const bowsPerRoll = totalYardsUsed > 0 ? Math.floor(25 / totalYardsUsed) : 0 // Assuming 25-yard rolls
     
     // Calculate profit scenarios
-    const profitPerBow = suggestedPrice - totalCost
+    const profitPerBow = suggestedPrice - totalCostWithFees
     const totalProfit = profitPerBow * bowsPerRoll
     
     // Calculate time estimates (rough estimate: 5-10 minutes per bow)
@@ -267,12 +293,12 @@ export function CostEstimatorWizard() {
     const totalTimeForRoll = (estimatedTimePerBow * bowsPerRoll) / 60 // hours
     
     // Calculate efficiency metrics
-    const costPerInch = totalCost / totalInches
+    const costPerInch = totalCostWithFees / totalInches
     const profitPerInch = profitPerBow / totalInches
 
     setEstimate({
       layers,
-      totalCost,
+      totalCost: totalCostWithFees,
       suggestedPrice,
       profitMargin,
       bowsPerRoll: Math.max(1, bowsPerRoll),
@@ -285,7 +311,10 @@ export function CostEstimatorWizard() {
       profitPerInch
     })
 
-    setCurrentStep(3)
+    // Set initial price slider to recommended price
+    setPriceSlider(suggestedPrice)
+
+    setCurrentStep(4)
     // Scroll to top and trigger awesome animation
     window.scrollTo({ top: 0, behavior: 'smooth' })
     setShowSummaryAnimation(true)
@@ -302,6 +331,46 @@ export function CostEstimatorWizard() {
     setPendingLayerId(null)
     setShowSummaryAnimation(false)
     setStepDirection('forward')
+    setShowCostBreakdown(false)
+    setSelectedVendor('')
+    setVendorFeePct(0.07)
+    setTaxPct(0.08)
+    setShippingCost(5.95)
+    setBowName('')
+    setRecipeName('')
+    setPriceSlider(0)
+  }
+
+  const handleVendorSelection = (vendorName: string) => {
+    setSelectedVendor(vendorName)
+    const vendor = VendorOptions.find(v => v.name === vendorName)
+    if (vendor) {
+      setVendorFeePct(vendor.vendorFeePct)
+      setShippingCost(vendor.avgShipping)
+    }
+  }
+
+  const getCostBreakdown = (): CostBreakdown => {
+    const baseCost = getTotalBowCost()
+    return calculateTotalCost(baseCost, vendorFeePct, taxPct, shippingCost)
+  }
+
+  const getDynamicPricing = (price: number) => {
+    const costBreakdown = getCostBreakdown()
+    const vendorFee = price * vendorFeePct
+    const tax = (price + vendorFee) * taxPct
+    const totalFees = vendorFee + tax + shippingCost
+    const profit = price - costBreakdown.baseCost - totalFees
+    const profitMargin = price > 0 ? (profit / price) * 100 : 0
+    
+    return {
+      price,
+      vendorFee,
+      tax,
+      totalFees,
+      profit,
+      profitMargin
+    }
   }
 
     const renderStep1 = () => (
@@ -453,6 +522,10 @@ export function CostEstimatorWizard() {
                         <ChevronRight className="h-4 w-4" />
                       )}
                     </Button>
+                    <div 
+                      className="w-4 h-4 rounded-full border border-gray-300"
+                      style={{ backgroundColor: layer.color }}
+                    />
                     <h4 className="text-lg font-semibold">Layer {index + 1}</h4>
                     {layer.ribbonType && (
                       <Badge variant="outline" className="text-xs">
@@ -513,6 +586,29 @@ export function CostEstimatorWizard() {
                               className="mt-2 text-base"
                             />
                           )}
+                        </div>
+
+                        {/* Color Selection */}
+                        <div>
+                          <Label className="text-sm font-medium mb-2 block">
+                            Ribbon Color
+                          </Label>
+                          <div className="flex flex-wrap gap-2">
+                            {ColorOptions.map((color) => (
+                              <button
+                                key={color.value}
+                                type="button"
+                                onClick={() => updateLayer(layer.id, 'color', color.value)}
+                                className={`w-8 h-8 rounded-full border-2 transition-all ${
+                                  layer.color === color.value 
+                                    ? 'border-gray-800 scale-110' 
+                                    : 'border-gray-300 hover:border-gray-500'
+                                }`}
+                                style={{ backgroundColor: color.hex }}
+                                title={color.name}
+                              />
+                            ))}
+                          </div>
                         </div>
 
                         {/* Ribbon Cost and Yards */}
@@ -753,7 +849,7 @@ export function CostEstimatorWizard() {
         </div>
         <div>
           <h2 className="text-xl sm:text-2xl font-bold">Confirm Bow Design</h2>
-          <p className="text-muted-foreground text-sm sm:text-base">Review your bow design before calculating costs</p>
+          <p className="text-muted-foreground text-sm sm:text-base">Review your bow design before setting vendor options</p>
         </div>
       </div>
 
@@ -766,11 +862,38 @@ export function CostEstimatorWizard() {
         <Progress value={(currentStep / totalSteps) * 100} className="h-2" />
       </div>
 
+      {/* Total Summary - Moved to Top */}
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.3, duration: 0.5 }}
+        className="p-6 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 rounded-lg border border-purple-200 dark:border-purple-800"
+      >
+        <div className="text-center space-y-4">
+          <h3 className="text-xl font-bold text-purple-800 dark:text-purple-200">Total Bow Summary</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Total Cost</p>
+              <p className="text-2xl font-bold text-purple-600">${getTotalBowCost().toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Total Length</p>
+              <p className="text-2xl font-bold text-purple-600">{getTotalInches().toFixed(1)}"</p>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {layers.length} layer{layers.length !== 1 ? 's' : ''} • Ready to calculate pricing
+          </p>
+        </div>
+      </motion.div>
+
+
+
       {/* Bow Design Summary */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ delay: 0.5, duration: 0.5 }}
         className="space-y-4"
       >
         {layers.map((layer, index) => (
@@ -783,7 +906,10 @@ export function CostEstimatorWizard() {
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-violet-500 rounded-full flex items-center justify-center text-white font-bold">
+                <div 
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold border border-gray-300"
+                  style={{ backgroundColor: layer.color }}
+                >
                   {index + 1}
                 </div>
                 <h3 className="text-lg font-semibold">Layer {index + 1}</h3>
@@ -858,36 +984,150 @@ export function CostEstimatorWizard() {
         ))}
       </motion.div>
 
-      {/* Total Summary */}
+      {/* Navigation */}
+      <div className="flex justify-between pt-4">
+        <Button variant="outline" onClick={prevStep}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Vendor Options
+        </Button>
+        <Button onClick={nextStep} className="gap-2">
+          Set Vendor Options
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
+
+  const renderStep3 = () => (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="text-center space-y-4">
+        <div className="mx-auto w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+          <Package className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+        </div>
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold">Vendor & Shipping Options</h2>
+          <p className="text-muted-foreground text-sm sm:text-base">Configure vendor fees, taxes, and shipping costs</p>
+        </div>
+      </div>
+
+      {/* Progress */}
+      <div className="space-y-2">
+        <div className="flex justify-between text-sm">
+          <span>Step {currentStep} of {totalSteps}</span>
+          <span>{Math.round((currentStep / totalSteps) * 100)}% Complete</span>
+        </div>
+        <Progress value={(currentStep / totalSteps) * 100} className="h-2" />
+      </div>
+
+      {/* Vendor Selection */}
       <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3, duration: 0.5 }}
-        className="p-6 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 rounded-lg border border-purple-200 dark:border-purple-800"
+        className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-lg border border-blue-200 dark:border-blue-800"
       >
-        <div className="text-center space-y-4">
-          <h3 className="text-xl font-bold text-purple-800 dark:text-purple-200">Total Bow Summary</h3>
-          <div className="grid grid-cols-2 gap-4">
+        <h4 className="text-lg font-semibold text-center mb-6">Select Your Vendor</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Vendor Platform</Label>
+            <Select value={selectedVendor} onValueChange={handleVendorSelection}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a vendor..." />
+              </SelectTrigger>
+              <SelectContent>
+                {VendorOptions.map((vendor) => (
+                  <SelectItem key={vendor.name} value={vendor.name}>
+                    {vendor.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-2">
+              Select your selling platform to auto-populate typical fees
+            </p>
+          </div>
+          
+          <div className="space-y-4">
             <div>
-              <p className="text-sm text-muted-foreground">Total Cost</p>
-              <p className="text-2xl font-bold text-purple-600">${getTotalBowCost().toFixed(2)}</p>
+              <Label className="text-sm font-medium mb-2 block">Vendor Fee Percentage</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                value={vendorFeePct}
+                onChange={(e) => setVendorFeePct(parseFloat(e.target.value) || 0)}
+                className="text-base"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Platform fee as a percentage of your selling price
+              </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total Length</p>
-              <p className="text-2xl font-bold text-purple-600">{getTotalInches().toFixed(1)}"</p>
+              <Label className="text-sm font-medium mb-2 block">Tax Rate</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                value={taxPct}
+                onChange={(e) => setTaxPct(parseFloat(e.target.value) || 0)}
+                className="text-base"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Sales tax rate for your location
+              </p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Shipping Cost</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={shippingCost}
+                onChange={(e) => setShippingCost(parseFloat(e.target.value) || 0)}
+                className="text-base"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Average shipping cost per order
+              </p>
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {layers.length} layer{layers.length !== 1 ? 's' : ''} • Ready to calculate pricing
-          </p>
         </div>
+        
+        {/* Cost Preview */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.5, duration: 0.5 }}
+          className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-lg border-2 border-blue-200 dark:border-blue-800"
+        >
+          <div className="text-center space-y-2">
+            <p className="text-sm text-muted-foreground">Total Cost Breakdown</p>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Base Cost</p>
+                <p className="font-bold text-blue-600">${getCostBreakdown().baseCost.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Fees & Shipping</p>
+                <p className="font-bold text-orange-600">${(getCostBreakdown().vendorFee + getCostBreakdown().tax + getCostBreakdown().shippingCost).toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Total Cost</p>
+                <p className="font-bold text-green-600">${getCostBreakdown().total.toFixed(2)}</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
       </motion.div>
 
       {/* Navigation */}
       <div className="flex justify-between pt-4">
         <Button variant="outline" onClick={prevStep}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Design
+          Back to Design Review
         </Button>
         <Button onClick={calculateEstimate} className="gap-2">
           Calculate Pricing
@@ -897,7 +1137,7 @@ export function CostEstimatorWizard() {
     </div>
   )
 
-  const renderStep3 = () => (
+  const renderStep4 = () => (
     <div className="space-y-6">
       {/* Header with Animation */}
       <motion.div 
@@ -927,7 +1167,7 @@ export function CostEstimatorWizard() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.5 }}
           >
-            Pricing Complete! 🎉
+            Pricing & Profit Analysis 🎯
           </motion.h2>
           <motion.p 
             className="text-muted-foreground text-base sm:text-lg"
@@ -935,127 +1175,121 @@ export function CostEstimatorWizard() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.5 }}
           >
-            Your bow cost calculation is ready
+            Adjust your price and see real-time profit calculations
           </motion.p>
         </div>
       </motion.div>
 
-      {/* Main Pricing Summary */}
+      {/* Consolidated Summary & Price Slider */}
       <motion.div 
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4, duration: 0.6 }}
         className="p-8 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 rounded-2xl border-2 border-green-200 dark:border-green-800"
       >
-        <div className="text-center space-y-6">
-          <h3 className="text-2xl font-bold text-green-800 dark:text-green-200">Recommended Pricing</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.6, duration: 0.5 }}
-              className="p-4 bg-white dark:bg-gray-800 rounded-xl border shadow-lg"
-            >
-              <div className="text-center space-y-2">
-                <p className="text-sm text-muted-foreground">Materials Cost</p>
-                <p className="text-2xl font-bold text-red-600">${estimate?.totalCost.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">Per bow</p>
+        <div className="space-y-8">
+          {/* Key Metrics */}
+          <div className="text-center">
+            <h3 className="text-2xl font-bold text-green-800 dark:text-green-200 mb-6">Pricing Summary</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border shadow-lg">
+                <p className="text-sm text-muted-foreground">Total Cost</p>
+                <p className="text-2xl font-bold text-red-600">${getCostBreakdown().total.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">With all fees</p>
               </div>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.8, duration: 0.5 }}
-              className="p-4 bg-white dark:bg-gray-800 rounded-xl border shadow-lg"
-            >
-              <div className="text-center space-y-2">
-                <p className="text-sm text-muted-foreground">Recommended Price</p>
+              <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border shadow-lg">
+                <p className="text-sm text-muted-foreground">Recommended</p>
                 <p className="text-2xl font-bold text-green-600">${estimate?.suggestedPrice.toFixed(2)}</p>
                 <p className="text-xs text-muted-foreground">60% margin</p>
               </div>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 1.0, duration: 0.5 }}
-              className="p-4 bg-white dark:bg-gray-800 rounded-xl border shadow-lg"
-            >
-              <div className="text-center space-y-2">
+              <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border shadow-lg">
                 <p className="text-sm text-muted-foreground">Profit per Bow</p>
-                <p className="text-2xl font-bold text-blue-600">${estimate?.profitPerBow.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">Pure profit</p>
+                <p className="text-2xl font-bold text-purple-600">${estimate?.profitPerBow.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">After fees</p>
               </div>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 1.2, duration: 0.5 }}
-              className="p-4 bg-white dark:bg-gray-800 rounded-xl border shadow-lg"
-            >
-              <div className="text-center space-y-2">
+              <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border shadow-lg">
                 <p className="text-sm text-muted-foreground">Bows per Roll</p>
-                <p className="text-2xl font-bold text-purple-600">{estimate?.bowsPerRoll}</p>
+                <p className="text-2xl font-bold text-blue-600">{estimate?.bowsPerRoll}</p>
                 <p className="text-xs text-muted-foreground">25-yard rolls</p>
               </div>
-            </motion.div>
+            </div>
           </div>
 
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.2, duration: 0.5 }}
-            className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800"
-          >
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 text-center">
+          {/* Interactive Price Slider */}
+          <div className="space-y-6">
+            <h4 className="text-lg font-semibold text-center">Adjust Your Price</h4>
+            <div className="space-y-4">
               <div>
-                <p className="text-sm text-muted-foreground">Profit Margin</p>
-                <p className="text-lg font-bold text-purple-600">{estimate?.profitMargin.toFixed(1)}%</p>
+                <div className="flex justify-between items-center mb-2">
+                  <Label className="text-sm font-medium">Your Selling Price</Label>
+                  <span className="text-lg font-bold text-indigo-600">${priceSlider.toFixed(2)}</span>
+                </div>
+                <Slider
+                  value={[priceSlider]}
+                  onValueChange={(value) => setPriceSlider(value[0])}
+                  min={getCostBreakdown().total}
+                  max={getCostBreakdown().total * 5}
+                  step={0.01}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>Break-even: ${getCostBreakdown().total.toFixed(2)}</span>
+                  <span>5x markup: ${(getCostBreakdown().total * 5).toFixed(2)}</span>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Length</p>
-                <p className="text-lg font-bold text-purple-600">{getTotalInches().toFixed(1)}"</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Time per Roll</p>
-                <p className="text-lg font-bold text-purple-600">{estimate?.totalTimeForRoll.toFixed(1)}h</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Layers</p>
-                <p className="text-lg font-bold text-purple-600">{layers.length}</p>
-              </div>
-            </div>
-          </motion.div>
 
-          {/* Pricing Strategy Options */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.4, duration: 0.5 }}
-            className="p-6 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 rounded-lg border border-green-200 dark:border-green-800"
-          >
-            <h4 className="text-lg font-semibold text-center mb-4">Pricing Strategy Options</h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg border">
-                <p className="text-sm text-muted-foreground">Conservative</p>
-                <p className="text-xl font-bold text-orange-600">${estimate?.conservativePrice.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">50% markup • ${((estimate?.conservativePrice || 0) - (estimate?.totalCost || 0)).toFixed(2)} profit</p>
-              </div>
-              <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg border-2 border-green-500">
-                <p className="text-sm text-muted-foreground">Recommended</p>
-                <p className="text-xl font-bold text-green-600">${estimate?.suggestedPrice.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">60% markup • ${estimate?.profitPerBow.toFixed(2)} profit</p>
-              </div>
-              <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg border">
-                <p className="text-sm text-muted-foreground">Premium</p>
-                <p className="text-xl font-bold text-purple-600">${estimate?.premiumPrice.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">67% markup • ${((estimate?.premiumPrice || 0) - (estimate?.totalCost || 0)).toFixed(2)} profit</p>
+              {/* Real-time Results */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg border">
+                  <p className="text-xs text-muted-foreground">Platform Fee</p>
+                  <p className="text-lg font-bold text-orange-600">${getDynamicPricing(priceSlider).vendorFee.toFixed(2)}</p>
+                </div>
+                <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg border">
+                  <p className="text-xs text-muted-foreground">Sales Tax</p>
+                  <p className="text-lg font-bold text-red-600">${getDynamicPricing(priceSlider).tax.toFixed(2)}</p>
+                </div>
+                <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg border">
+                  <p className="text-xs text-muted-foreground">Your Profit</p>
+                  <p className="text-lg font-bold text-green-600">${getDynamicPricing(priceSlider).profit.toFixed(2)}</p>
+                </div>
+                <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg border-2 border-indigo-500">
+                  <p className="text-xs text-muted-foreground">Profit Margin</p>
+                  <p className="text-lg font-bold text-indigo-600">{getDynamicPricing(priceSlider).profitMargin.toFixed(1)}%</p>
+                </div>
               </div>
             </div>
-          </motion.div>
+          </div>
+        </div>
+      </motion.div>
+
+
+
+
+
+      {/* Ribbon Usage Optimization */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 1.2, duration: 0.5 }}
+        className="p-6 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 rounded-lg border border-amber-200 dark:border-amber-800"
+      >
+        <h4 className="text-lg font-semibold text-center mb-4">Ribbon Usage Optimization</h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {layers.map((layer, index) => {
+            const usageSummary = calculateRibbonUsageSummary(layer.yardsUsed)
+            return (
+              <div key={layer.id} className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg border">
+                <div 
+                  className="w-6 h-6 rounded-full mx-auto mb-2 border border-gray-300"
+                  style={{ backgroundColor: layer.color }}
+                />
+                <p className="text-sm font-medium">Layer {index + 1}</p>
+                <p className="text-lg font-bold text-blue-600">{usageSummary.bowsPerRoll} bows/roll</p>
+                <p className="text-xs text-muted-foreground">{usageSummary.percentUsed.toFixed(1)}% of roll used</p>
+                <p className="text-xs text-amber-600 mt-1">{usageSummary.recommendation}</p>
+              </div>
+            )
+          })}
         </div>
       </motion.div>
 
@@ -1063,7 +1297,7 @@ export function CostEstimatorWizard() {
       <motion.div 
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8, duration: 0.6 }}
+        transition={{ delay: 1.3, duration: 0.6 }}
         className="space-y-4"
       >
         <h3 className="text-xl font-bold text-center">Layer Breakdown</h3>
@@ -1073,7 +1307,7 @@ export function CostEstimatorWizard() {
               key={layer.id}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 1.0 + index * 0.1, duration: 0.4 }}
+              transition={{ delay: 1.4 + index * 0.1, duration: 0.4 }}
               className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 rounded-lg border border-purple-200 dark:border-purple-800"
             >
               <div className="flex items-center justify-between">
@@ -1098,16 +1332,52 @@ export function CostEstimatorWizard() {
         </div>
       </motion.div>
 
-      {/* Action Buttons */}
+      {/* Save Options */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 1.4, duration: 0.5 }}
+        className="p-6 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/20 dark:to-purple-950/20 rounded-lg border border-indigo-200 dark:border-indigo-800"
+      >
+        <h4 className="text-lg font-semibold text-center mb-4">Save Your Design</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">Bow Name</Label>
+            <Input
+              placeholder="Enter bow name..."
+              value={bowName}
+              onChange={(e) => setBowName(e.target.value)}
+            />
+            <Button className="w-full gap-2" disabled={!bowName.trim()}>
+              <Save className="h-4 w-4" />
+              Save Bow
+            </Button>
+          </div>
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">Recipe Name</Label>
+            <Input
+              placeholder="Enter recipe name..."
+              value={recipeName}
+              onChange={(e) => setRecipeName(e.target.value)}
+            />
+            <Button variant="outline" className="w-full gap-2" disabled={!recipeName.trim()}>
+              <BookOpen className="h-4 w-4" />
+              Save Recipe
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Action Buttons */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 1.5, duration: 0.5 }}
         className="flex flex-col sm:flex-row gap-4 justify-center pt-6"
       >
         <Button variant="outline" onClick={prevStep} className="gap-2">
           <ArrowLeft className="h-4 w-4" />
-          Back to Design
+          Back to Vendor Options
         </Button>
         <motion.div
           whileHover={{ scale: 1.05 }}
@@ -1130,6 +1400,8 @@ export function CostEstimatorWizard() {
         return renderStep2()
       case 3:
         return renderStep3()
+      case 4:
+        return renderStep4()
       default:
         return renderStep1()
     }
