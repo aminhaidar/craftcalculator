@@ -115,19 +115,6 @@ export function CostExplorer() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="text-center space-y-4">
-        <div className="flex items-center justify-center gap-2">
-          <div className="rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 p-2">
-            <Calculator className="h-6 w-6 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold">Cost Explorer</h1>
-        </div>
-        <p className="text-muted-foreground max-w-2xl mx-auto">
-          Experiment with different ribbon combinations, quantities, and pricing strategies. 
-          Start with a recipe or build from scratch. See how changes affect your costs, profit margins, and pricing recommendations.
-        </p>
-      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Configuration Panel */}
