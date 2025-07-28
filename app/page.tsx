@@ -47,6 +47,139 @@ export default function HomePage() {
             </div>
           </div>
 
+          {/* Recent Bows Section */}
+          <div className="space-y-6 mb-12">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Recent Bows</h2>
+              <Link href="/bows">
+                <Button variant="outline" size="sm">
+                  View All
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {loading ? (
+                // Loading state
+                Array.from({ length: 3 }).map((_, index) => (
+                  <Card key={index} className="p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-8 h-8 bg-gradient-to-r from-gray-300 to-gray-400 rounded-full animate-pulse"></div>
+                      <div className="flex-1">
+                        <div className="h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+                        <div className="h-3 bg-gray-200 rounded animate-pulse w-2/3"></div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-3 bg-gray-200 rounded animate-pulse w-full"></div>
+                      <div className="h-3 bg-gray-200 rounded animate-pulse w-3/4"></div>
+                      <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2"></div>
+                    </div>
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="h-4 bg-gray-200 rounded animate-pulse w-16"></div>
+                      <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>
+                    </div>
+                  </Card>
+                ))
+              ) : recentBows.length > 0 ? (
+                // Real data
+                recentBows.map((bow, index) => (
+                  <Link key={bow.id} href={`/bows/${bow.id}`}>
+                    <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className={`w-8 h-8 bg-gradient-to-r ${
+                          index === 0 ? 'from-pink-500 to-purple-500' :
+                          index === 1 ? 'from-blue-500 to-teal-500' :
+                          'from-purple-500 to-pink-500'
+                        } rounded-full flex items-center justify-center text-white text-sm font-bold`}>
+                          {index + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold truncate">{bow.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {bow.layers} layers • {bow.materials?.length || 0} materials
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Ribbon Details */}
+                      <div className="space-y-2 mb-3">
+                        {bow.materials?.slice(0, 2).map((material: any, matIndex: number) => (
+                          <div key={matIndex} className="flex items-center gap-2 text-xs">
+                            <div 
+                              className="w-3 h-3 rounded-full border border-gray-300 flex-shrink-0"
+                              style={{ 
+                                backgroundColor: material.ribbon?.colors?.[0] || '#ef4444' 
+                              }}
+                            />
+                            <span className="text-muted-foreground truncate">
+                              {material.ribbon?.ribbonType || 'Ribbon'} • {material.ribbon?.material || 'Material'}
+                            </span>
+                            {material.ribbon?.widthInches && (
+                              <span className="text-muted-foreground">
+                                {material.ribbon.widthInches}" wide
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                        {bow.materials?.length > 2 && (
+                          <div className="text-xs text-muted-foreground">
+                            +{bow.materials.length - 2} more materials
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Style & Category Info */}
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {bow.category && (
+                          <Badge variant="secondary" className="text-xs">
+                            {bow.category}
+                          </Badge>
+                        )}
+                        {bow.difficulty && (
+                          <Badge variant="outline" className="text-xs">
+                            {bow.difficulty}
+                          </Badge>
+                        )}
+                        {bow.status && (
+                          <Badge 
+                            variant={bow.status === 'excellent' ? 'default' : 
+                                   bow.status === 'good' ? 'secondary' : 'destructive'}
+                            className="text-xs"
+                          >
+                            {bow.status}
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* Price & Profit */}
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-green-600 font-medium">${bow.targetPrice?.toFixed(2) || '0.00'}</span>
+                        <span className="text-muted-foreground">{bow.profitMargin?.toFixed(1) || '0'}% margin</span>
+                      </div>
+                    </Card>
+                  </Link>
+                ))
+              ) : (
+                // Empty state
+                <div className="col-span-full text-center py-8">
+                  <div className="mx-auto w-16 h-16 bg-gradient-to-r from-gray-300 to-gray-400 rounded-full flex items-center justify-center mb-4">
+                    <Gift className="h-8 w-8 text-gray-500" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">No bows yet</h3>
+                  <p className="text-muted-foreground mb-4">Create your first bow design to get started</p>
+                  <Link href="/bow-calculator">
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create First Bow
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Quick Actions */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
             <Card className="hover:shadow-lg transition-shadow cursor-pointer group">
@@ -108,82 +241,6 @@ export default function HomePage() {
                 </CardContent>
               </Link>
             </Card>
-          </div>
-
-          {/* Recent Bows Section */}
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Recent Bows</h2>
-              <Link href="/bows">
-                <Button variant="outline" size="sm">
-                  View All
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {loading ? (
-                // Loading state
-                Array.from({ length: 3 }).map((_, index) => (
-                  <Card key={index} className="p-4">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-gradient-to-r from-gray-300 to-gray-400 rounded-full animate-pulse"></div>
-                      <div className="flex-1">
-                        <div className="h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
-                        <div className="h-3 bg-gray-200 rounded animate-pulse w-2/3"></div>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="h-4 bg-gray-200 rounded animate-pulse w-16"></div>
-                      <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>
-                    </div>
-                  </Card>
-                ))
-              ) : recentBows.length > 0 ? (
-                // Real data
-                recentBows.map((bow, index) => (
-                  <Link key={bow.id} href={`/bows/${bow.id}`}>
-                    <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className={`w-8 h-8 bg-gradient-to-r ${
-                          index === 0 ? 'from-pink-500 to-purple-500' :
-                          index === 1 ? 'from-blue-500 to-teal-500' :
-                          'from-purple-500 to-pink-500'
-                        } rounded-full flex items-center justify-center text-white text-sm font-bold`}>
-                          {index + 1}
-                        </div>
-                        <div>
-                          <h3 className="font-semibold">{bow.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {bow.layers} layers • {bow.materials?.length || 0} materials
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-green-600 font-medium">${bow.targetPrice?.toFixed(2) || '0.00'}</span>
-                        <span className="text-muted-foreground">{bow.profitMargin?.toFixed(1) || '0'}% margin</span>
-                      </div>
-                    </Card>
-                  </Link>
-                ))
-              ) : (
-                // Empty state
-                <div className="col-span-full text-center py-8">
-                  <div className="mx-auto w-16 h-16 bg-gradient-to-r from-gray-300 to-gray-400 rounded-full flex items-center justify-center mb-4">
-                    <Gift className="h-8 w-8 text-gray-500" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">No bows yet</h3>
-                  <p className="text-muted-foreground mb-4">Create your first bow design to get started</p>
-                  <Link href="/bow-calculator">
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create First Bow
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Features Section */}

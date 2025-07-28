@@ -26,12 +26,44 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
-import { type BowRecipe } from "@/lib/bow-data"
 import { getAllBows, type Bow } from "@/lib/bow-data"
 import { getAllRibbons, type RibbonInventoryRecord } from "@/lib/ribbon-data"
 
+// Define the actual API response structure
+interface RecipeLayer {
+  id: string
+  recipeId: string
+  ribbonId: string
+  color: string
+  loops: { quantity: number; length: number }[]
+  tails: { quantity: number; length: number }[]
+  streamers: { quantity: number; length: number }[]
+  order: number
+  ribbon?: {
+    id: string
+    ribbonType: string
+    material: string
+    designType: string
+    colors: string
+    costPerYard: number
+  }
+}
+
+interface Recipe {
+  id: string
+  name: string
+  description: string
+  category: string
+  difficulty: "Easy" | "Medium" | "Hard"
+  estimatedTime: string
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+  layers: RecipeLayer[]
+}
+
 interface RecipeDetailPageProps {
-  recipe: BowRecipe
+  recipe: Recipe
 }
 
 export function RecipeDetailPage({ recipe }: RecipeDetailPageProps) {
@@ -81,10 +113,12 @@ export function RecipeDetailPage({ recipe }: RecipeDetailPageProps) {
   const getBowsUsingRecipe = () => {
     // This is a simplified check - in a real app, bows would have a recipeId field
     return bows.filter(bow => 
-      bow.ribbons.some(ribbonName => 
-        recipe.layers.some(layer => 
-          layer.ribbonName.toLowerCase().includes(ribbonName.toLowerCase())
-        )
+      bow.ribbons && bow.ribbons.some(ribbonName => 
+        recipe.layers && recipe.layers.some(layer => {
+          const ribbon = ribbons.find(r => r.ribbonId === layer.ribbonId);
+          const layerRibbonName = ribbon?.ribbonType || layer.ribbon?.ribbonType || '';
+          return layerRibbonName.toLowerCase().includes(ribbonName.toLowerCase());
+        })
       )
     )
   }
@@ -99,7 +133,7 @@ export function RecipeDetailPage({ recipe }: RecipeDetailPageProps) {
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="relative">
             {/* Bow Layers */}
-            {recipe.layers.map((layer, index) => (
+            {recipe.layers && recipe.layers.map((layer, index) => (
               <div
                 key={index}
                 className="absolute transform -translate-x-1/2 -translate-y-1/2"
@@ -122,7 +156,7 @@ export function RecipeDetailPage({ recipe }: RecipeDetailPageProps) {
             
             {/* Streamers */}
             <div className="absolute transform -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2 mt-8">
-              {recipe.layers.slice(0, 3).map((layer, index) => (
+              {recipe.layers && recipe.layers.slice(0, 3).map((layer, index) => (
                 <div
                   key={index}
                   className="w-1.5 h-12 mb-2 rounded-full"
@@ -136,7 +170,7 @@ export function RecipeDetailPage({ recipe }: RecipeDetailPageProps) {
         {/* Layer Count Badge */}
         <div className="absolute top-4 right-4">
           <Badge variant="secondary" className="text-sm">
-            {recipe.layers.length} layers
+            {recipe.layers ? recipe.layers.length : 0} layers
           </Badge>
         </div>
       </div>
@@ -146,7 +180,7 @@ export function RecipeDetailPage({ recipe }: RecipeDetailPageProps) {
   const renderRibbonBreakdown = () => {
     return (
       <div className="space-y-4">
-        {recipe.layers.map((layer, index) => {
+        {recipe.layers && recipe.layers.map((layer, index) => {
           const ribbon = ribbons.find(r => r.ribbonId === layer.ribbonId)
           const totalInches = layer.loops.reduce((sum, loop) => sum + (loop.quantity * loop.length), 0) +
                              layer.tails.reduce((sum, tail) => sum + (tail.quantity * tail.length), 0)
@@ -162,7 +196,7 @@ export function RecipeDetailPage({ recipe }: RecipeDetailPageProps) {
                       style={{ backgroundColor: layer.color }}
                     />
                     <div>
-                      <CardTitle className="text-lg">{ribbon?.ribbonType || layer.ribbonName}</CardTitle>
+                      <CardTitle className="text-lg">{ribbon?.ribbonType || layer.ribbon?.ribbonType || 'Unknown Ribbon'}</CardTitle>
                       <CardDescription>Layer {index + 1}</CardDescription>
                     </div>
                   </div>
@@ -174,47 +208,59 @@ export function RecipeDetailPage({ recipe }: RecipeDetailPageProps) {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
                     <span className="text-muted-foreground">Type:</span>
-                    <p className="font-medium">{ribbon?.designType || 'Unknown'}</p>
+                    <p className="font-medium">{ribbon?.designType || layer.ribbon?.designType || 'Unknown'}</p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Width:</span>
-                    <p className="font-medium">{ribbon?.widthInches || 'Unknown'}"</p>
+                    <span className="text-muted-foreground">Material:</span>
+                    <p className="font-medium">{ribbon?.material || layer.ribbon?.material || 'Unknown'}</p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Cost/Yard:</span>
-                    <p className="font-medium">${ribbon?.costPerYard?.toFixed(2) || '0.00'}</p>
+                    <span className="text-muted-foreground">Color:</span>
+                    <p className="font-medium">{layer.color}</p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Total Inches:</span>
-                    <p className="font-medium">{totalInches}"</p>
+                    <span className="text-muted-foreground">Cost:</span>
+                    <p className="font-medium">${ribbon?.costPerYard || layer.ribbon?.costPerYard || 0}/yard</p>
                   </div>
                 </div>
 
                 {/* Loops and Tails */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <h4 className="font-semibold mb-2">Loops</h4>
-                    <div className="space-y-2">
+                    <h4 className="font-medium mb-2">Loops</h4>
+                    <div className="space-y-1">
                       {layer.loops.map((loop, loopIndex) => (
-                        <div key={loopIndex} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                          <span className="text-sm">{loop.quantity} × {loop.length}"</span>
-                          <span className="text-sm font-medium">{loop.quantity * loop.length}"</span>
+                        <div key={loopIndex} className="text-sm text-muted-foreground">
+                          {loop.quantity} × {loop.length}" loops
                         </div>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <h4 className="font-semibold mb-2">Tails</h4>
-                    <div className="space-y-2">
+                    <h4 className="font-medium mb-2">Tails</h4>
+                    <div className="space-y-1">
                       {layer.tails.map((tail, tailIndex) => (
-                        <div key={tailIndex} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                          <span className="text-sm">{tail.quantity} × {tail.length}"</span>
-                          <span className="text-sm font-medium">{tail.quantity * tail.length}"</span>
+                        <div key={tailIndex} className="text-sm text-muted-foreground">
+                          {tail.quantity} × {tail.length}" tails
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
+
+                {/* Streamers */}
+                {layer.streamers && layer.streamers.length > 0 && (
+                  <div>
+                    <h4 className="font-medium mb-2">Streamers</h4>
+                    <div className="space-y-1">
+                      {layer.streamers.map((streamer, streamerIndex) => (
+                        <div key={streamerIndex} className="text-sm text-muted-foreground">
+                          {streamer.quantity} × {streamer.length}" streamers
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )
@@ -338,7 +384,7 @@ export function RecipeDetailPage({ recipe }: RecipeDetailPageProps) {
               {/* Key Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{recipe.layers.length}</div>
+                  <div className="text-2xl font-bold text-blue-600">{recipe.layers ? recipe.layers.length : 0}</div>
                   <div className="text-sm text-muted-foreground">Layers</div>
                 </div>
                 <div className="text-center">
@@ -483,7 +529,7 @@ export function RecipeDetailPage({ recipe }: RecipeDetailPageProps) {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Layer Complexity</span>
-                    <span className="font-medium">{recipe.layers.length} layers</span>
+                    <span className="font-medium">{recipe.layers ? recipe.layers.length : 0} layers</span>
                   </div>
                 </div>
                 <Separator />

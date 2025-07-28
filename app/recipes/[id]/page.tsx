@@ -11,10 +11,20 @@ interface RecipeDetailPageProps {
 export default async function RecipeDetailPageRoute({ params }: RecipeDetailPageProps) {
   try {
     const { id } = await params
-    // For now, we'll use the mock data directly since we don't have API routes for recipes yet
-    // In a real app, this would fetch from an API
-    const { getRecipeById } = await import("@/lib/bow-data")
-    const recipe = getRecipeById(id)
+    
+    // Fetch recipe from API
+    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/recipes/${id}`, {
+      cache: 'no-store'
+    })
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        notFound()
+      }
+      throw new Error(`Failed to fetch recipe: ${response.status}`)
+    }
+
+    const recipe = await response.json()
 
     if (!recipe) {
       notFound()
