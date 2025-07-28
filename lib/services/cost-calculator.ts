@@ -43,21 +43,105 @@ export const calculateYardsUsed = (
   return loopYards + streamerYards;
 };
 
+export interface RibbonUsageSummary {
+  percentUsed: number;
+  wasteYards: number;
+  recommendation: string;
+  bowsPerRoll: number;
+  totalYardsUsed: number;
+  rollsNeeded: number;
+  totalWaste: number;
+  efficiency: 'excellent' | 'good' | 'poor';
+}
+
 export const calculateRibbonUsageSummary = (
   usedYards: number, 
   rollYards: number = 25
-) => {
+): RibbonUsageSummary => {
   const percentUsed = (usedYards / rollYards) * 100;
   const wasteYards = rollYards - usedYards;
-  const recommendation =
-    wasteYards > 1
-      ? `Consider making a small bow to use remaining ${wasteYards.toFixed(2)} yards`
-      : 'Optimized usage';
+  const bowsPerRoll = Math.floor(rollYards / usedYards);
+  
+  let recommendation = 'Optimized usage';
+  let efficiency: 'excellent' | 'good' | 'poor' = 'good';
+  
+  if (wasteYards > 2) {
+    recommendation = `Consider making ${Math.floor(wasteYards / usedYards)} more small bows to use the remaining ${wasteYards.toFixed(2)} yards`;
+    efficiency = 'poor';
+  } else if (wasteYards > 1) {
+    recommendation = `Consider making a small bow to use remaining ${wasteYards.toFixed(2)} yards`;
+    efficiency = 'good';
+  } else if (percentUsed >= 95) {
+    recommendation = 'Excellent ribbon efficiency!';
+    efficiency = 'excellent';
+  }
   
   return { 
     percentUsed, 
     wasteYards, 
     recommendation,
-    bowsPerRoll: Math.floor(rollYards / usedYards)
+    bowsPerRoll,
+    totalYardsUsed: usedYards,
+    rollsNeeded: 1,
+    totalWaste: wasteYards,
+    efficiency
   };
+};
+
+export const calculateMultiLayerRibbonUsage = (
+  layers: Array<{
+    ribbonType: string;
+    ribbonYards: number;
+    yardsUsed: number;
+  }>,
+  rollYards: number = 25
+) => {
+  // Group layers by ribbon type
+  const ribbonGroups = layers.reduce((groups, layer) => {
+    if (!groups[layer.ribbonType]) {
+      groups[layer.ribbonType] = [];
+    }
+    groups[layer.ribbonType].push(layer);
+    return groups;
+  }, {} as Record<string, typeof layers>);
+
+  const results: Record<string, RibbonUsageSummary> = {};
+
+  Object.entries(ribbonGroups).forEach(([ribbonType, ribbonLayers]) => {
+    const totalYardsUsed = ribbonLayers.reduce((sum, layer) => sum + layer.yardsUsed, 0);
+    const totalRollYards = ribbonLayers.reduce((sum, layer) => sum + layer.ribbonYards, 0);
+    
+    const percentUsed = (totalYardsUsed / totalRollYards) * 100;
+    const wasteYards = totalRollYards - totalYardsUsed;
+    const bowsPerRoll = Math.floor(totalRollYards / totalYardsUsed);
+    const rollsNeeded = Math.ceil(totalYardsUsed / rollYards);
+    
+    let recommendation = 'Optimized usage';
+    let efficiency: 'excellent' | 'good' | 'poor' = 'good';
+    
+    if (wasteYards > 2) {
+      const additionalBows = Math.floor(wasteYards / totalYardsUsed);
+      recommendation = `Consider making ${additionalBows} more bows to use the remaining ${wasteYards.toFixed(2)} yards`;
+      efficiency = 'poor';
+    } else if (wasteYards > 1) {
+      recommendation = `Consider making a small bow to use remaining ${wasteYards.toFixed(2)} yards`;
+      efficiency = 'good';
+    } else if (percentUsed >= 95) {
+      recommendation = 'Excellent ribbon efficiency!';
+      efficiency = 'excellent';
+    }
+    
+    results[ribbonType] = {
+      percentUsed,
+      wasteYards,
+      recommendation,
+      bowsPerRoll,
+      totalYardsUsed,
+      rollsNeeded,
+      totalWaste: wasteYards,
+      efficiency
+    };
+  });
+
+  return results;
 }; 

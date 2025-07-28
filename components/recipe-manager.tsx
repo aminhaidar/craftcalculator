@@ -29,25 +29,103 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "@/components/ui/use-toast"
-import { 
-  getAllRecipes, 
-  addNewRecipe, 
-  updateRecipe, 
-  deleteRecipe, 
-  getAllBows,
-  type BowRecipe,
-  type Bow
-} from "@/lib/bow-data"
-import { 
-  getAllRibbons, 
-  addNewRibbon,
-  type RibbonInventoryRecord,
-  RibbonTypeOptions,
-  WidthOptions,
-  RollLengthOptions,
-  DesignTypeOptions,
-  ColorOptions
-} from "@/lib/ribbon-data"
+import { useRecipes, useBows, useRibbons } from "@/hooks/use-api-data"
+
+// Constants for ribbon options
+const RibbonTypeOptions = [
+  'Burlap & Jute','Canvas','Cotton','Denim','Dupioni','Flannel',
+  'Flocked','Fur','Glitter','Grosgrain','Lace','Metallic Foil',
+  'Metallic Lamé','Organza','Poly Mesh','Sackcloth & Linen',
+  'Satin','Sheer','Taffeta','Tinsel','Translucent PVC','Velvet',
+  'Water Resistant','Webbing'
+];
+
+const WidthOptions = [
+  0.625, 0.875, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0
+];
+
+const RollLengthOptions = [5, 10, 20, 25, 30, 50, 100, 500];
+
+const DesignTypeOptions = [
+  'Animal Print','Basket Weave','Camouflage','Check','Chevron',
+  'Damask','Embroidered','Floral','Geometric','Harlequin',
+  'Houndstooth','Marble','Ombre','Plaid','Polka Dot','Quatrefoil',
+  'Seasonal Print','Solid','Stripes','Text','Two Tone','Windowpane'
+];
+
+const ColorOptions = [
+  'Beige','Black','Blue','Brown','Gold','Green','Grey','Orange',
+  'Pink','Purple','Red','Silver','White','Yellow','Iridescent'
+];
+
+// Type definitions
+interface BowRecipe {
+  id: string
+  name: string
+  description: string
+  layers: {
+    ribbonId: string
+    ribbonName: string
+    color: string
+    loops: { quantity: number; length: number }[]
+    tails: { quantity: number; length: number }[]
+  }[]
+  category: string
+  difficulty: "Easy" | "Medium" | "Hard"
+  estimatedTime: string
+  tags: string[]
+}
+
+interface RibbonInventoryRecord {
+  ribbonId: string
+  ribbonType: string
+  material: string
+  wired: boolean
+  widthInches: number
+  rollLengthYards: number
+  designType: string
+  theme?: string
+  colors?: string[]
+  availability: 'In stock' | 'Out of stock'
+  brand?: string
+  costPerYard?: number
+  supplier?: string
+  lastOrdered?: string
+  inStock?: number
+  minStock?: number
+  maxStock?: number
+  imageUrl?: string
+}
+
+interface Bow {
+  id: string
+  name: string
+  description: string
+  image: string
+  totalCost: number
+  targetPrice: number
+  profit: number
+  profitMargin: number
+  status: "excellent" | "good" | "low"
+  createdAt: string
+  ribbons: string[]
+  layers: number
+  timeToMake: string
+  difficulty: "Easy" | "Medium" | "Hard"
+  category: string
+  tags: string[]
+  materials: {
+    name: string
+    quantity: string
+    cost: number
+  }[]
+  instructions: string[]
+  salesHistory: {
+    month: string
+    sales: number
+    revenue: number
+  }[]
+}
 
 interface RecipeManagerProps {
   onRecipeSelect?: (recipe: BowRecipe) => void
@@ -55,9 +133,9 @@ interface RecipeManagerProps {
 }
 
 export function RecipeManager({ onRecipeSelect, onClose }: RecipeManagerProps) {
-  const [recipes, setRecipes] = useState<BowRecipe[]>(getAllRecipes())
-  const [ribbons, setRibbons] = useState<RibbonInventoryRecord[]>(getAllRibbons())
-  const [bows, setBows] = useState<Bow[]>(getAllBows())
+  const { recipes, loading: recipesLoading, refetch: refetchRecipes } = useRecipes()
+  const { bows, loading: bowsLoading } = useBows()
+  const { ribbons, loading: ribbonsLoading } = useRibbons()
   const [isCreating, setIsCreating] = useState(false)
   const [editingRecipe, setEditingRecipe] = useState<BowRecipe | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
@@ -131,7 +209,7 @@ export function RecipeManager({ onRecipeSelect, onClose }: RecipeManagerProps) {
     })
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name.trim()) {
       toast({
         title: "Error",
@@ -157,38 +235,72 @@ export function RecipeManager({ onRecipeSelect, onClose }: RecipeManagerProps) {
       category: formData.category || "Custom",
       difficulty: formData.difficulty,
       estimatedTime: formData.estimatedTime,
-      tags: formData.tags.split(",").map(tag => tag.trim()).filter(Boolean),
+      tags: formData.tags.split(",").map((tag: string) => tag.trim()).filter(Boolean),
       layers: formData.layers.filter(layer => layer.ribbonId.trim())
     }
 
-    if (editingRecipe) {
-      const updatedRecipe = { ...editingRecipe, ...recipeData }
-      updateRecipe(updatedRecipe)
+    try {
+      if (editingRecipe) {
+        const response = await fetch(`/api/recipes/${editingRecipe.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(recipeData)
+        })
+        
+        if (!response.ok) throw new Error('Failed to update recipe')
+        
+        toast({
+          title: "Recipe Updated",
+          description: "Your recipe has been updated successfully.",
+        })
+      } else {
+        const response = await fetch('/api/recipes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(recipeData)
+        })
+        
+        if (!response.ok) throw new Error('Failed to create recipe')
+        
+        toast({
+          title: "Recipe Created",
+          description: "Your new recipe has been saved successfully.",
+        })
+      }
+      
+      refetchRecipes()
+      setIsCreating(false)
+      setEditingRecipe(null)
+    } catch (error) {
       toast({
-        title: "Recipe Updated",
-        description: "Your recipe has been updated successfully.",
-      })
-    } else {
-      addNewRecipe(recipeData)
-      toast({
-        title: "Recipe Created",
-        description: "Your new recipe has been saved successfully.",
+        title: "Error",
+        description: "Failed to save recipe. Please try again.",
+        variant: "destructive"
       })
     }
-
-    setRecipes(getAllRecipes())
-    setIsCreating(false)
-    setEditingRecipe(null)
   }
 
-  const handleDelete = (recipe: BowRecipe) => {
+  const handleDelete = async (recipe: BowRecipe) => {
     if (confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
-      deleteRecipe(recipe.id)
-      setRecipes(getAllRecipes())
-      toast({
-        title: "Recipe Deleted",
-        description: "The recipe has been removed.",
-      })
+      try {
+        const response = await fetch(`/api/recipes/${recipe.id}`, {
+          method: 'DELETE'
+        })
+        
+        if (!response.ok) throw new Error('Failed to delete recipe')
+        
+        refetchRecipes()
+        toast({
+          title: "Recipe Deleted",
+          description: "The recipe has been removed.",
+        })
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to delete recipe. Please try again.",
+          variant: "destructive"
+        })
+      }
     }
   }
 
@@ -229,7 +341,7 @@ export function RecipeManager({ onRecipeSelect, onClose }: RecipeManagerProps) {
     }))
   }
 
-  const handleAddRibbonToInventory = () => {
+  const handleAddRibbonToInventory = async () => {
     if (!newRibbonData.ribbonType.trim()) {
       toast({
         title: "Error",
@@ -239,37 +351,52 @@ export function RecipeManager({ onRecipeSelect, onClose }: RecipeManagerProps) {
       return;
     }
 
-    const newRibbon = addNewRibbon({
-      ...newRibbonData,
-      material: newRibbonData.ribbonType,
-      wired: false,
-      inStock: 0,
-      minStock: 0,
-      maxStock: 0
-    });
+    try {
+      const ribbonData = {
+        ...newRibbonData,
+        material: newRibbonData.ribbonType,
+        wired: false,
+        inStock: 0,
+        minStock: 0,
+        maxStock: 0
+      };
 
-    setRibbons(getAllRibbons());
-    setShowRibbonForm(false);
-    setNewRibbonData({
-      ribbonType: "",
-      widthInches: 1.5,
-      rollLengthYards: 25,
-      designType: "Solid",
-      colors: ["Black"],
-      availability: "In stock",
-      costPerYard: 0,
-      brand: "",
-      supplier: ""
-    });
+      const response = await fetch('/api/ribbons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ribbonData)
+      });
 
-    toast({
-      title: "Ribbon Added",
-      description: "New ribbon has been added to inventory.",
-    });
+      if (!response.ok) throw new Error('Failed to add ribbon');
+
+      setShowRibbonForm(false);
+      setNewRibbonData({
+        ribbonType: "",
+        widthInches: 1.5,
+        rollLengthYards: 25,
+        designType: "Solid",
+        colors: ["Black"],
+        availability: "In stock",
+        costPerYard: 0,
+        brand: "",
+        supplier: ""
+      });
+
+      toast({
+        title: "Ribbon Added",
+        description: "New ribbon has been added to inventory.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add ribbon. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const findRibbonInInventory = (ribbonName: string): RibbonInventoryRecord | undefined => {
-    return ribbons.find(ribbon => 
+    return ribbons.find((ribbon: RibbonInventoryRecord) => 
       ribbon.ribbonType.toLowerCase().includes(ribbonName.toLowerCase()) ||
       ribbon.designType.toLowerCase().includes(ribbonName.toLowerCase())
     );
@@ -317,9 +444,9 @@ export function RecipeManager({ onRecipeSelect, onClose }: RecipeManagerProps) {
   const getBowsUsingRecipe = (recipe: BowRecipe) => {
     // This is a simplified check - in a real app, bows would have a recipeId field
     return bows.filter(bow => 
-      bow.ribbons.some(ribbonName => 
-        recipe.layers.some(layer => 
-          layer.ribbonName.toLowerCase().includes(ribbonName.toLowerCase())
+      bow.ribbons && bow.ribbons.some((ribbonName: string) => 
+        recipe.layers && recipe.layers.some(layer => 
+          layer.ribbonName && layer.ribbonName.toLowerCase().includes(ribbonName.toLowerCase())
         )
       )
     )
@@ -525,7 +652,7 @@ export function RecipeManager({ onRecipeSelect, onClose }: RecipeManagerProps) {
                     category: formData.category,
                     difficulty: formData.difficulty,
                     estimatedTime: formData.estimatedTime,
-                    tags: formData.tags.split(",").map(tag => tag.trim()).filter(Boolean),
+                    tags: formData.tags.split(",").map((tag: string) => tag.trim()).filter(Boolean),
                     layers: formData.layers.filter(layer => layer.ribbonId.trim())
                   });
                   return (
@@ -815,7 +942,7 @@ export function RecipeManager({ onRecipeSelect, onClose }: RecipeManagerProps) {
 
                   {/* Tags */}
                   <div className="flex flex-wrap gap-1">
-                    {recipe.tags.slice(0, 3).map((tag) => (
+                    {recipe.tags.slice(0, 3).map((tag: string) => (
                       <Badge key={tag} variant="outline" className="text-xs">
                         {tag}
                       </Badge>

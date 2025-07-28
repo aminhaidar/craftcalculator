@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { BowService } from '@/lib/services/bow-service'
+import { prisma } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,8 +33,26 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const bow = await BowService.createBow(body)
+    const data = await request.json()
+    
+    // Create the bow with the new data structure
+    const bow = await prisma.bow.create({
+      data: {
+        name: data.name,
+        description: `${data.description}\n\nVendor: ${data.vendorInfo?.name || 'Unknown'}\nPrimary Color: ${data.primaryColor || 'Unknown'}`,
+        totalCost: data.totalCost,
+        targetPrice: data.sellingPrice,
+        profit: data.profit,
+        profitMargin: data.profitMargin,
+        status: data.profitMargin >= 50 ? 'excellent' : data.profitMargin >= 30 ? 'good' : 'low',
+        timeToMake: '15-20 minutes',
+        difficulty: 'Medium',
+        category: 'Custom Bow',
+        tags: ['custom', 'calculated'],
+        layers: data.layers.length
+      }
+    })
+
     return NextResponse.json(bow, { status: 201 })
   } catch (error) {
     console.error('Error creating bow:', error)

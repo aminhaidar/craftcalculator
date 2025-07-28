@@ -1,717 +1,403 @@
 "use client"
 
-import { useState } from "react"
-import { 
-  ArrowLeft, 
-  Heart, 
-  Share2, 
-  Edit, 
-  Copy, 
-  Trash2, 
-  Package, 
-  Calculator, 
-  DollarSign,
-  Star,
-  Clock,
-  Tag,
-  Users,
-  TrendingUp,
-  Eye,
-  Save,
-  X,
-  Plus,
-  Minus,
-  Camera,
-  Upload
-} from "lucide-react"
+import { useState, useEffect } from "react"
+import { motion } from "framer-motion"
+import { ArrowLeft, Calculator, Edit, Save, BookOpen, Eye, TrendingUp, Package, Scissors, Trash2, AlertTriangle } from "lucide-react"
 import Link from "next/link"
-
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { BowPlaceholder } from "@/components/bow-placeholder"
-import { getBowById, type Bow } from "@/lib/bow-data"
-import { toast } from "@/components/ui/use-toast"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
+import { calculateRibbonUsageSummary } from "@/lib/services/cost-calculator"
 
 interface BowDetailPageProps {
   bowId: string
-  onSave?: (bow: Bow) => void
 }
 
-export function BowDetailPage({ bowId, onSave }: BowDetailPageProps) {
-  const [activeTab, setActiveTab] = useState("overview")
-  const [isEditing, setIsEditing] = useState(false)
-  const [imagePreview, setImagePreview] = useState<string>("")
-  
-  // Get the actual bow data based on the ID
-  const originalBow = getBowById(bowId)
-  
-  // If bow not found, show error state
-  if (!originalBow) {
+interface BowData {
+  id: string
+  name: string
+  description: string
+  totalCost: number
+  targetPrice: number
+  profit: number
+  profitMargin: number
+  status: string
+  category: string
+  tags: string[]
+  layers: number
+  createdAt: string
+  materials: Array<{
+    name: string
+    quantity: string
+    cost: number
+  }>
+}
+
+export function BowDetailPage({ bowId }: BowDetailPageProps) {
+  const [bow, setBow] = useState<BowData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const router = useRouter()
+  const { toast } = useToast()
+
+  useEffect(() => {
+    const fetchBow = async () => {
+      try {
+        const response = await fetch(`/api/bows/${bowId}`)
+        if (!response.ok) {
+          throw new Error('Bow not found')
+        }
+        const bowData = await response.json()
+        setBow(bowData)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load bow')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchBow()
+  }, [bowId])
+
+  const handleDelete = async () => {
+    if (!bow) return
+    
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/bows/${bow.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        toast({
+          title: "🎉 Bow deleted successfully",
+          description: "The bow has been removed from your library.",
+        })
+        
+        // Add a small delay for better UX
+        setTimeout(() => {
+          router.push('/bows')
+        }, 1000)
+      } else {
+        throw new Error('Failed to delete bow')
+      }
+    } catch (error) {
+      console.error('Error deleting bow:', error)
+      toast({
+        title: "Error deleting bow",
+        description: "Please try again or check your connection.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link href="/">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Library
-            </Button>
-          </Link>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="text-muted-foreground">Loading bow details...</p>
         </div>
-        <Card>
-          <CardContent className="p-8 text-center">
-            <h2 className="text-2xl font-bold mb-2">Bow Not Found</h2>
-            <p className="text-muted-foreground">The bow you're looking for doesn't exist.</p>
-          </CardContent>
-        </Card>
       </div>
     )
   }
 
-  // Create editable state
-  const [bow, setBow] = useState<Bow>(originalBow)
-
-  const getStatusBadge = (status: string, margin: number) => {
-    switch (status) {
-      case "excellent":
-        return <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white">Excellent Profit</Badge>
-      case "good":
-        return <Badge variant="secondary" className="bg-blue-500 hover:bg-blue-600 text-white">Good Profit</Badge>
-      case "low":
-        return <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-300">Low Margin</Badge>
-      default:
-        return <Badge variant="destructive">Loss</Badge>
-    }
-  }
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "File too large",
-          description: "Please select an image smaller than 5MB.",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const result = e.target?.result as string
-        setImagePreview(result)
-        setBow(prev => ({ ...prev, image: result }))
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const handleSave = () => {
-    // Here you would typically save to a database
-    if (onSave) {
-      onSave(bow)
-    }
-    setIsEditing(false)
-    toast({
-      title: "Bow Updated",
-      description: "Your bow design has been saved successfully.",
-    })
-  }
-
-  const handleCancel = () => {
-    setBow(originalBow)
-    setImagePreview("")
-    setIsEditing(false)
-  }
-
-  const addMaterial = () => {
-    setBow(prev => ({
-      ...prev,
-      materials: [...prev.materials, { name: "", quantity: "", cost: 0 }]
-    }))
-  }
-
-  const removeMaterial = (index: number) => {
-    setBow(prev => ({
-      ...prev,
-      materials: prev.materials.filter((_, i) => i !== index)
-    }))
-  }
-
-  const updateMaterial = (index: number, field: string, value: string | number) => {
-    setBow(prev => ({
-      ...prev,
-      materials: prev.materials.map((material, i) => 
-        i === index ? { ...material, [field]: value } : material
-      )
-    }))
-  }
-
-  const addInstruction = () => {
-    setBow(prev => ({
-      ...prev,
-      instructions: [...prev.instructions, ""]
-    }))
-  }
-
-  const removeInstruction = (index: number) => {
-    setBow(prev => ({
-      ...prev,
-      instructions: prev.instructions.filter((_, i) => i !== index)
-    }))
-  }
-
-  const updateInstruction = (index: number, value: string) => {
-    setBow(prev => ({
-      ...prev,
-      instructions: prev.instructions.map((instruction, i) => 
-        i === index ? value : instruction
-      )
-    }))
+  if (error || !bow) {
+    return (
+      <div className="text-center py-12">
+        <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
+          <Eye className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold mb-2">Bow not found</h3>
+        <p className="text-muted-foreground mb-4">
+          The bow you're looking for doesn't exist or has been removed.
+        </p>
+        <Link href="/bows">
+          <Button>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Bow Library
+          </Button>
+        </Link>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-6xl mx-auto space-y-8">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Back to Library</span>
+          <Link href="/bows">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Library
             </Button>
           </Link>
-          <div className="hidden sm:block h-6 w-px bg-border" />
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold">{bow.name}</h1>
-            <p className="text-sm text-muted-foreground">Bow Design #{bow.id}</p>
+            <h1 className="text-3xl font-bold">{bow.name}</h1>
+            <p className="text-muted-foreground">{bow.description}</p>
           </div>
         </div>
-        
         <div className="flex items-center gap-2">
-          {!isEditing ? (
-            <>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Heart className="h-4 w-4" />
-                <span className="hidden sm:inline">Favorite</span>
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Share2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Share</span>
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2" onClick={() => setIsEditing(true)}>
-                <Edit className="h-4 w-4" />
-                <span className="hidden sm:inline">Edit</span>
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" size="sm" className="gap-2" onClick={handleCancel}>
-                <X className="h-4 w-4" />
-                <span className="hidden sm:inline">Cancel</span>
-              </Button>
-              <Button size="sm" className="gap-2" onClick={handleSave}>
-                <Save className="h-4 w-4" />
-                <span className="hidden sm:inline">Save Changes</span>
-              </Button>
-            </>
-          )}
+          <Button variant="outline" size="sm">
+            <Edit className="h-4 w-4 mr-2" />
+            Edit
+          </Button>
+          <Button size="sm">
+            <Calculator className="h-4 w-4 mr-2" />
+            Recalculate
+          </Button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="grid gap-6 lg:gap-8 lg:grid-cols-3">
-        {/* Left Column - Image and Stats */}
-        <div className="lg:col-span-1 space-y-4 lg:space-y-6">
-          {/* Image Section */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="aspect-square rounded-lg overflow-hidden bg-muted relative">
-                {(bow.image || imagePreview) ? (
-                  <img 
-                    src={imagePreview || bow.image} 
-                    alt={bow.name} 
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <BowPlaceholder name={bow.name} className="h-full" />
-                )}
-                
-                {isEditing && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                      <Button variant="secondary" size="sm" className="gap-2">
-                        <Camera className="h-4 w-4" />
-                        Change Photo
-                      </Button>
-                    </label>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">${bow.totalCost.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">With all fees</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Selling Price</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">${bow.targetPrice.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">Recommended price</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Profit per Bow</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">${bow.profit.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">After all costs</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Profit Margin</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-indigo-600">{bow.profitMargin.toFixed(1)}%</div>
+            <p className="text-xs text-muted-foreground">Of selling price</p>
+          </CardContent>
+        </Card>
+      </div>
 
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-green-600">${bow.profit.toFixed(2)}</div>
-                <div className="text-xs text-muted-foreground">Profit</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold">{bow.profitMargin.toFixed(1)}%</div>
-                <div className="text-xs text-muted-foreground">Margin</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold">{bow.layers}</div>
-                <div className="text-xs text-muted-foreground">Layers</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold">${bow.totalCost.toFixed(2)}</div>
-                <div className="text-xs text-muted-foreground">Cost</div>
-              </CardContent>
-            </Card>
+      {/* Cost Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Cost Breakdown & Profit Analysis
+          </CardTitle>
+          <CardDescription>
+            Detailed breakdown of all costs and profit calculations
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="text-center p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-sm text-muted-foreground">Base Materials</p>
+                             <p className="text-xl font-bold text-blue-600">
+                 ${(bow.totalCost * 0.7).toFixed(2)}
+               </p>
+             </div>
+             <div className="text-center p-4 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
+               <p className="text-sm text-muted-foreground">Platform Fee</p>
+               <p className="text-xl font-bold text-orange-600">
+                 ${(bow.targetPrice * 0.1).toFixed(2)}
+               </p>
+             </div>
+             <div className="text-center p-4 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-800">
+               <p className="text-sm text-muted-foreground">Sales Tax</p>
+               <p className="text-xl font-bold text-red-600">
+                 ${(bow.targetPrice * 0.08).toFixed(2)}
+               </p>
+            </div>
+            <div className="text-center p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+              <p className="text-sm text-muted-foreground">Your Profit</p>
+              <p className="text-xl font-bold text-green-600">${bow.profit.toFixed(2)}</p>
+            </div>
           </div>
+          
+                     <div className="p-4 bg-muted/30 rounded-lg">
+             <div className="flex items-center justify-between mb-2">
+               <span className="text-sm font-medium">Vendor Information</span>
+               <Badge variant="outline">Standard Vendor</Badge>
+             </div>
+             <div className="grid grid-cols-3 gap-4 text-sm">
+               <div>
+                 <span className="text-muted-foreground">Fee Rate:</span>
+                 <span className="ml-1 font-medium">10.0%</span>
+               </div>
+               <div>
+                 <span className="text-muted-foreground">Tax Rate:</span>
+                 <span className="ml-1 font-medium">8.0%</span>
+               </div>
+               <div>
+                 <span className="text-muted-foreground">Shipping:</span>
+                 <span className="ml-1 font-medium">$5.95</span>
+               </div>
+             </div>
+           </div>
+        </CardContent>
+      </Card>
 
-          {/* Status Badge */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Profit Status</span>
-                {getStatusBadge(bow.status, bow.profitMargin)}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+      {/* Ribbon Usage Optimization */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            Ribbon Usage Optimization
+          </CardTitle>
+          <CardDescription>
+            Efficiency analysis for each ribbon layer
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+             {bow.materials.map((material, index) => (
+               <div 
+                 key={index}
+                 className="text-center p-4 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+               >
+                 <div 
+                   className="w-8 h-8 rounded-full mx-auto mb-2 border border-gray-300"
+                   style={{ backgroundColor: '#ef4444' }}
+                 />
+                 <p className="text-sm font-medium">Layer {index + 1}</p>
+                 <p className="text-lg font-bold text-blue-600">
+                   {material.name}
+                 </p>
+                 <p className="text-xs text-muted-foreground">
+                   {material.quantity}
+                 </p>
+                 <p className="text-xs text-muted-foreground">
+                   ${material.cost.toFixed(2)}
+                 </p>
+               </div>
+             ))}
+           </div>
+        </CardContent>
+      </Card>
 
-        {/* Right Column - Details and Tabs */}
-        <div className="lg:col-span-2 space-y-4 lg:space-y-6">
-          {/* Pricing & Profit Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Pricing & Profit
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isEditing ? (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="text-sm font-medium">Target Price</label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={bow.targetPrice}
-                      onChange={(e) => setBow(prev => ({ ...prev, targetPrice: parseFloat(e.target.value) || 0 }))}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Time to Make</label>
-                    <Input
-                      value={bow.timeToMake}
-                      onChange={(e) => setBow(prev => ({ ...prev, timeToMake: e.target.value }))}
-                      placeholder="e.g., 15-20 minutes"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="text-center p-4 bg-green-50 dark:bg-green-950/20 rounded-lg">
-                    <div className="text-2xl font-bold text-green-600">${bow.targetPrice.toFixed(2)}</div>
-                    <div className="text-sm text-muted-foreground">Target Price</div>
-                  </div>
-                  <div className="text-center p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600">${bow.totalCost.toFixed(2)}</div>
-                    <div className="text-sm text-muted-foreground">Total Cost</div>
-                  </div>
-                  <div className="text-center p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg">
-                    <div className="text-2xl font-bold text-emerald-600">${bow.profit.toFixed(2)}</div>
-                    <div className="text-sm text-muted-foreground">Profit</div>
-                  </div>
-                  <div className="text-center p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
-                    <div className="text-2xl font-bold text-purple-600">{bow.profitMargin.toFixed(1)}%</div>
-                    <div className="text-sm text-muted-foreground">Margin</div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Basic Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Basic Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isEditing ? (
-                <>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="text-sm font-medium">Name</label>
-                      <Input
-                        value={bow.name}
-                        onChange={(e) => setBow(prev => ({ ...prev, name: e.target.value }))}
-                        placeholder="Bow name"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Category</label>
-                      <Input
-                        value={bow.category}
-                        onChange={(e) => setBow(prev => ({ ...prev, category: e.target.value }))}
-                        placeholder="Category"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Description</label>
-                    <Textarea
-                      value={bow.description}
-                      onChange={(e) => setBow(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Describe your bow design..."
-                      rows={3}
-                    />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <div>
-                      <label className="text-sm font-medium">Time to Make</label>
-                      <Input
-                        value={bow.timeToMake}
-                        onChange={(e) => setBow(prev => ({ ...prev, timeToMake: e.target.value }))}
-                        placeholder="e.g., 15-20 minutes"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Difficulty</label>
-                      <Select value={bow.difficulty} onValueChange={(value) => setBow(prev => ({ ...prev, difficulty: value as any }))}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Easy">Easy</SelectItem>
-                          <SelectItem value="Medium">Medium</SelectItem>
-                          <SelectItem value="Hard">Hard</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Target Price</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={bow.targetPrice}
-                        onChange={(e) => setBow(prev => ({ ...prev, targetPrice: parseFloat(e.target.value) || 0 }))}
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h2 className="text-xl font-semibold">{bow.name}</h2>
-                      <p className="text-muted-foreground mt-1">{bow.description}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-2">
-                    {bow.tags.map((tag: string) => (
-                      <Badge key={tag} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-
-                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-sm">
-                     <div className="flex items-center gap-2">
-                       <Clock className="h-4 w-4 text-muted-foreground" />
-                       <span>{bow.timeToMake}</span>
+      {/* Layer Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Scissors className="h-5 w-5" />
+            Layer Breakdown
+          </CardTitle>
+          <CardDescription>
+            Detailed specifications for each layer
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+                     <div className="space-y-4">
+             {bow.materials.map((material, index) => (
+               <div 
+                 key={index}
+                 className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 rounded-lg border border-purple-200 dark:border-purple-800"
+               >
+                 <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                     <div 
+                       className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold border border-gray-300"
+                       style={{ backgroundColor: '#ef4444' }}
+                     >
+                       {index + 1}
                      </div>
-                     <div className="flex items-center gap-2">
-                       <Tag className="h-4 w-4 text-muted-foreground" />
-                       <span>{bow.category}</span>
-                     </div>
-                     <div className="flex items-center gap-2">
-                       <Package className="h-4 w-4 text-muted-foreground" />
-                       <span>{bow.ribbons.length} ribbons</span>
+                     <div>
+                       <p className="font-semibold">{material.name}</p>
+                       <p className="text-sm text-muted-foreground">
+                         {material.quantity}
+                       </p>
                      </div>
                    </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
+                   <div className="text-right">
+                     <p className="font-bold text-lg">${material.cost.toFixed(2)}</p>
+                     <p className="text-sm text-muted-foreground">
+                       Layer {index + 1}
+                     </p>
+                   </div>
+                 </div>
+               </div>
+             ))}
+           </div>
+        </CardContent>
+      </Card>
 
-          {/* Tabs */}
-                      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-                <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
-                <TabsTrigger value="materials" className="text-xs sm:text-sm">Materials</TabsTrigger>
-                <TabsTrigger value="instructions" className="text-xs sm:text-sm">Instructions</TabsTrigger>
-                <TabsTrigger value="analytics" className="text-xs sm:text-sm">Analytics</TabsTrigger>
-              </TabsList>
-
-                          <TabsContent value="overview" className="space-y-4 lg:space-y-6 pt-4 lg:pt-6">
-                <div className="grid gap-4 lg:gap-6 md:grid-cols-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Package className="h-5 w-5" />
-                      Materials Summary
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {bow.materials.slice(0, 3).map((material, index) => (
-                        <div key={index} className="flex items-center justify-between">
-                          <div>
-                            <div className="font-medium text-sm">{material.name}</div>
-                            <div className="text-xs text-muted-foreground">{material.quantity}</div>
-                          </div>
-                          <div className="font-semibold text-sm">${material.cost.toFixed(2)}</div>
-                        </div>
-                      ))}
-                      {bow.materials.length > 3 && (
-                        <div className="text-xs text-muted-foreground text-center pt-2">
-                          +{bow.materials.length - 3} more materials
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5" />
-                      Sales Performance
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Total Sales</span>
-                        <span className="font-semibold">{bow.salesHistory.reduce((sum, month) => sum + month.sales, 0)} units</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Total Revenue</span>
-                        <span className="font-semibold">${bow.salesHistory.reduce((sum, month) => sum + month.revenue, 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Avg Monthly</span>
-                        <span className="font-semibold">{Math.round(bow.salesHistory.reduce((sum, month) => sum + month.sales, 0) / bow.salesHistory.length)} units</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-                          <TabsContent value="materials" className="space-y-4 lg:space-y-6 pt-4 lg:pt-6">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Materials List</CardTitle>
-                    {isEditing && (
-                      <Button size="sm" onClick={addMaterial} className="gap-2">
-                        <Plus className="h-4 w-4" />
-                        Add Material
-                      </Button>
-                    )}
-                  </div>
-                  <CardDescription>Complete breakdown of all materials and costs</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {bow.materials.map((material, index) => (
-                      <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                        {isEditing ? (
-                          <>
-                            <div className="flex items-center gap-3 flex-1">
-                              <div className="w-3 h-3 rounded-full bg-primary" />
-                              <div className="flex-1 grid gap-2 sm:grid-cols-3">
-                                <Input
-                                  value={material.name}
-                                  onChange={(e) => updateMaterial(index, "name", e.target.value)}
-                                  placeholder="Material name"
-                                  className="text-sm"
-                                />
-                                <Input
-                                  value={material.quantity}
-                                  onChange={(e) => updateMaterial(index, "quantity", e.target.value)}
-                                  placeholder="Quantity"
-                                  className="text-sm"
-                                />
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  value={material.cost}
-                                  onChange={(e) => updateMaterial(index, "cost", parseFloat(e.target.value) || 0)}
-                                  placeholder="Cost"
-                                  className="text-sm"
-                                />
-                              </div>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeMaterial(index)}
-                              className="text-destructive hover:text-destructive/90 hover:bg-destructive/10"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-3">
-                              <div className="w-3 h-3 rounded-full bg-primary" />
-                              <div>
-                                <div className="font-medium">{material.name}</div>
-                                <div className="text-sm text-muted-foreground">{material.quantity}</div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-semibold">${material.cost.toFixed(2)}</div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                    {!isEditing && (
-                      <>
-                        <Separator />
-                        <div className="flex items-center justify-between font-semibold">
-                          <span>Total Materials Cost</span>
-                          <span>${bow.totalCost.toFixed(2)}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-                          <TabsContent value="instructions" className="space-y-4 lg:space-y-6 pt-4 lg:pt-6">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Step-by-Step Instructions</CardTitle>
-                    {isEditing && (
-                      <Button size="sm" onClick={addInstruction} className="gap-2">
-                        <Plus className="h-4 w-4" />
-                        Add Step
-                      </Button>
-                    )}
-                  </div>
-                  <CardDescription>How to recreate this bow design</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {bow.instructions.map((instruction, index) => (
-                      <div key={index} className="flex items-start gap-4">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-medium flex-shrink-0">
-                          {index + 1}
-                        </div>
-                        <div className="flex-1">
-                          {isEditing ? (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                value={instruction}
-                                onChange={(e) => updateInstruction(index, e.target.value)}
-                                placeholder="Enter instruction step..."
-                                className="flex-1"
-                              />
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeInstruction(index)}
-                                className="text-destructive hover:text-destructive/90 hover:bg-destructive/10"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <p className="text-sm">{instruction}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-                          <TabsContent value="analytics" className="space-y-4 lg:space-y-6 pt-4 lg:pt-6">
-                <div className="grid gap-4 lg:gap-6 md:grid-cols-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5" />
-                      Monthly Sales
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {bow.salesHistory.map((month) => (
-                        <div key={month.month} className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{month.month}</span>
-                          <div className="flex items-center gap-4">
-                            <span className="text-sm text-muted-foreground">{month.sales} sold</span>
-                            <span className="font-semibold">${month.revenue.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Eye className="h-5 w-5" />
-                      Performance Metrics
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Profit Margin</span>
-                        <span className="font-semibold text-green-600">{bow.profitMargin.toFixed(1)}%</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">ROI</span>
-                        <span className="font-semibold text-green-600">{((bow.profit / bow.totalCost) * 100).toFixed(1)}%</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Avg Order Value</span>
-                        <span className="font-semibold">${bow.targetPrice.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+      {/* Action Buttons */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-center pt-6">
+        <Link href="/bow-calculator">
+          <Button variant="outline" className="gap-2">
+            <Calculator className="h-4 w-4" />
+            Design New Bow
+          </Button>
+        </Link>
+        <Button className="gap-2">
+          <Edit className="h-4 w-4" />
+          Edit This Bow
+        </Button>
+        <Button variant="outline" className="gap-2">
+          <BookOpen className="h-4 w-4" />
+          Save as Recipe
+        </Button>
+        
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" className="gap-2">
+              <Trash2 className="h-4 w-4" />
+              Delete Bow
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                Delete Bow
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete "{bow.name}"? This action cannot be undone and will permanently remove the bow from your library.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Bow
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )

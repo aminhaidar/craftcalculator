@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2, Copy, Eye } from "lucide-react"
 import Link from "next/link"
 
@@ -10,34 +10,119 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { BowPlaceholder } from "@/components/bow-placeholder"
-import { getAllBows } from "@/lib/bow-data"
+import { BowVisual } from "@/components/bow-visual"
+import { toast } from "@/components/ui/use-toast"
 
-// Get bow data from service and sort by most recent
-const mockBows = getAllBows().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+interface Bow {
+  id: string
+  name: string
+  description: string
+  totalCost: number
+  targetPrice: number
+  profit: number
+  profitMargin: number
+  status: string
+  category: string
+  tags: string[]
+  layers: number
+  createdAt: string
+  image?: string
+  materials: Array<{
+    name: string
+    quantity: string
+    cost: number
+  }>
+}
 
 export function BowLibrary() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [filteredBows, setFilteredBows] = useState(mockBows)
+  const [bows, setBows] = useState<Bow[]>([])
+  const [filteredBows, setFilteredBows] = useState<Bow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchBows = async () => {
+      try {
+        const response = await fetch('/api/bows')
+        if (!response.ok) {
+          throw new Error('Failed to fetch bows')
+        }
+        const data = await response.json()
+        setBows(data)
+        setFilteredBows(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load bows')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchBows()
+  }, [])
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
-    const filtered = mockBows.filter(
-      (bow) =>
+    const filtered = bows.filter(
+      (bow: Bow) =>
         bow.name.toLowerCase().includes(query.toLowerCase()) ||
         bow.description.toLowerCase().includes(query.toLowerCase()) ||
-        bow.ribbons.some((ribbon) => ribbon.toLowerCase().includes(query.toLowerCase())),
+        bow.materials.some((material) => material.name.toLowerCase().includes(query.toLowerCase())),
     )
     setFilteredBows(filtered)
+  }
+
+  const handleDelete = async (bowId: string) => {
+    if (!confirm('Are you sure you want to delete this bow? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/bows/${bowId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        // Remove the bow from the local state
+        setBows(bows.filter(bow => bow.id !== bowId))
+        setFilteredBows(filteredBows.filter(bow => bow.id !== bowId))
+        
+        toast({
+          title: "Bow deleted successfully",
+          description: "The bow has been removed from your library.",
+        })
+      } else {
+        throw new Error('Failed to delete bow')
+      }
+    } catch (error) {
+      toast({
+        title: "Error deleting bow",
+        description: "Please try again or check your connection.",
+        variant: "destructive"
+      })
+    }
   }
 
   const getStatusBadge = (status: string, margin: number) => {
     switch (status) {
       case "excellent":
-        return <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white">Excellent</Badge>
+        return (
+          <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-medium shadow-sm">
+            ⭐ Excellent
+          </Badge>
+        )
       case "good":
-        return <Badge variant="secondary" className="bg-blue-500 hover:bg-blue-600 text-white">Good</Badge>
+        return (
+          <Badge className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-medium shadow-sm">
+            ✓ Good
+          </Badge>
+        )
       case "low":
-        return <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-300">Low</Badge>
+        return (
+          <Badge className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-medium shadow-sm">
+            ⚠ Low
+          </Badge>
+        )
       default:
         return <Badge variant="destructive">Loss</Badge>
     }
@@ -66,7 +151,7 @@ export function BowLibrary() {
             <CardTitle className="text-sm font-medium">Total Bows</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockBows.length}</div>
+            <div className="text-2xl font-bold">{bows.length}</div>
             <p className="text-xs text-muted-foreground">Designs in library</p>
           </CardContent>
         </Card>
@@ -76,7 +161,7 @@ export function BowLibrary() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${(mockBows.reduce((sum, bow) => sum + bow.profit, 0) / mockBows.length).toFixed(2)}
+              ${bows.length > 0 ? (bows.reduce((sum: number, bow: Bow) => sum + bow.profit, 0) / bows.length).toFixed(2) : '0.00'}
             </div>
             <p className="text-xs text-muted-foreground">Per bow</p>
           </CardContent>
@@ -87,7 +172,7 @@ export function BowLibrary() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {(mockBows.reduce((sum, bow) => sum + bow.profitMargin, 0) / mockBows.length).toFixed(1)}%
+              {bows.length > 0 ? (bows.reduce((sum: number, bow: Bow) => sum + bow.profitMargin, 0) / bows.length).toFixed(1) : '0.0'}%
             </div>
             <p className="text-xs text-muted-foreground">Profit margin</p>
           </CardContent>
@@ -97,7 +182,7 @@ export function BowLibrary() {
             <CardTitle className="text-sm font-medium">High Performers</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockBows.filter((bow) => bow.profitMargin >= 50).length}</div>
+            <div className="text-2xl font-bold">{bows.filter((bow: Bow) => bow.profitMargin >= 50).length}</div>
             <p className="text-xs text-muted-foreground">50%+ margin</p>
           </CardContent>
         </Card>
@@ -120,15 +205,38 @@ export function BowLibrary() {
         </Button>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading bows...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="text-center py-12">
+          <div className="mx-auto w-24 h-24 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
+            <Search className="h-8 w-8 text-red-600" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">Error loading bows</h3>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>
+            Try Again
+          </Button>
+        </div>
+      )}
+
       {/* Bow Grid */}
-      <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {!loading && !error && (
+        <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {filteredBows.map((bow) => (
-          <Card key={bow.id} className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => window.location.href = `/bow/${bow.id}`}>
+          <Card key={bow.id} className="overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer group transform hover:scale-[1.02] hover:-translate-y-1" onClick={() => window.location.href = `/bows/${bow.id}`}>
             <div className="aspect-video relative overflow-hidden">
               {bow.image ? (
                 <img src={bow.image} alt={bow.name} className="object-cover w-full h-full" />
               ) : (
-                <BowPlaceholder name={bow.name} />
+                <BowVisual bow={bow} />
               )}
               <div className="absolute top-2 right-2">{getStatusBadge(bow.status, bow.profitMargin)}</div>
             </div>
@@ -151,13 +259,13 @@ export function BowLibrary() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem asChild>
-                      <Link href={`/bow/${bow.id}`}>
+                      <Link href={`/bows/${bow.id}`}>
                         <Eye className="mr-2 h-4 w-4" />
                         View Details
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href={`/bow/${bow.id}/edit`}>
+                      <Link href={`/bows/${bow.id}/edit`}>
                         <Edit className="mr-2 h-4 w-4" />
                         Edit
                       </Link>
@@ -166,7 +274,13 @@ export function BowLibrary() {
                       <Copy className="mr-2 h-4 w-4" />
                       Duplicate
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive">
+                    <DropdownMenuItem 
+                      className="text-destructive"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        handleDelete(bow.id)
+                      }}
+                    >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Delete
                     </DropdownMenuItem>
@@ -177,11 +291,46 @@ export function BowLibrary() {
             <CardContent className="pt-0">
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-1">
-                  {bow.ribbons.map((ribbon, index) => (
-                    <Badge key={index} variant="outline" className="text-xs">
-                      {ribbon}
+                  {bow.materials.slice(0, 3).map((material, index) => {
+                    // Extract color from material name
+                    const getMaterialColor = (name: string): string => {
+                      const materialName = name.toLowerCase()
+                      if (materialName.includes('red')) return '#ef4444'
+                      if (materialName.includes('blue')) return '#3b82f6'
+                      if (materialName.includes('green')) return '#10b981'
+                      if (materialName.includes('yellow')) return '#f59e0b'
+                      if (materialName.includes('pink')) return '#ec4899'
+                      if (materialName.includes('purple')) return '#8b5cf6'
+                      if (materialName.includes('orange')) return '#f97316'
+                      if (materialName.includes('black')) return '#1f2937'
+                      if (materialName.includes('white')) return '#f3f4f6'
+                      if (materialName.includes('gold')) return '#fbbf24'
+                      if (materialName.includes('silver')) return '#9ca3af'
+                      return '#6b7280'
+                    }
+                    
+                    const color = getMaterialColor(material.name)
+                    
+                    return (
+                      <Badge 
+                        key={index} 
+                        variant="outline" 
+                        className="text-xs border-2"
+                        style={{ 
+                          borderColor: color,
+                          color: color,
+                          backgroundColor: `${color}10`
+                        }}
+                      >
+                        {material.name}
+                      </Badge>
+                    )
+                  })}
+                  {bow.materials.length > 3 && (
+                    <Badge variant="outline" className="text-xs">
+                      +{bow.materials.length - 3} more
                     </Badge>
-                  ))}
+                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-2 sm:gap-4 text-sm">
                   <div>
@@ -206,8 +355,10 @@ export function BowLibrary() {
           </Card>
         ))}
       </div>
+      )}
 
-      {filteredBows.length === 0 && (
+      {/* Empty State */}
+      {!loading && !error && filteredBows.length === 0 && (
         <div className="text-center py-12">
           <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
             <Search className="h-8 w-8 text-muted-foreground" />
@@ -216,7 +367,7 @@ export function BowLibrary() {
           <p className="text-muted-foreground mb-4">
             {searchQuery ? "Try adjusting your search terms" : "Create your first bow design to get started"}
           </p>
-          <Link href="/bow/new">
+          <Link href="/bow-calculator">
             <Button>
               <Plus className="h-4 w-4 mr-2" />
               Create New Bow
