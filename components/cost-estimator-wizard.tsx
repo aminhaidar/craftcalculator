@@ -34,30 +34,11 @@ import {
   Check
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
-import { calculateTotalCost, calculateYardsUsed, calculateRibbonUsageSummary, type CostBreakdown } from "@/lib/services/cost-calculator"
+import { calculateTotalCost, calculateYardsUsed, calculateRibbonUsageSummary, type CostBreakdown, type OptimizationSuggestion } from "@/lib/services/cost-calculator"
 import { VendorOptions, ColorOptions } from "@/lib/vendor-data"
+import { RibbonTypeOptions, DesignTypeOptions } from "@/lib/ribbon-data"
 
-const RIBBON_TYPES = [
-  "Satin",
-  "Grosgrain", 
-  "Velvet",
-  "Organza",
-  "Taffeta",
-  "Chiffon",
-  "Silk",
-  "Polyester",
-  "Cotton",
-  "Lace",
-  "Wired",
-  "Sheer",
-  "Metallic",
-  "Glitter",
-  "Burlap",
-  "Jute",
-  "Bamboo",
-  "Recycled",
-  "Other"
-] as const
+const RIBBON_TYPES = RibbonTypeOptions
 
 const COMMON_LOOP_COUNTS = [3, 4, 5, 6, 8, 10, 12] as const
 const COMMON_LOOP_LENGTHS = [3, 4, 5, 6, 8, 10, 12] as const
@@ -67,6 +48,7 @@ const COMMON_STREAMER_LENGTHS = [8, 10, 12, 15, 18, 20, 24] as const
 interface BowLayer {
   id: string
   ribbonType: string
+  designType: string
   ribbonCost: number
   ribbonYards: number
   costPerYard: number
@@ -125,6 +107,7 @@ export function CostEstimatorWizard() {
     const newLayer: BowLayer = {
       id: Date.now().toString(),
       ribbonType: "",
+      designType: "Solid",
       ribbonCost: 0,
       ribbonYards: 0,
       costPerYard: 0,
@@ -231,6 +214,7 @@ export function CostEstimatorWizard() {
           return {
             ...layer,
             ribbonType: firstLayer.ribbonType,
+            designType: firstLayer.designType,
             ribbonCost: firstLayer.ribbonCost,
             ribbonYards: firstLayer.ribbonYards,
             costPerYard: firstLayer.costPerYard
@@ -387,6 +371,7 @@ export function CostEstimatorWizard() {
         ribbonUsage: layers.map(layer => ({
           layerId: layer.id,
           ribbonType: layer.ribbonType,
+          designType: layer.designType,
           yardsUsed: layer.yardsUsed,
           percentUsed: ((layer.yardsUsed / layer.ribbonYards) * 100),
           wasteYards: layer.ribbonYards - layer.yardsUsed
@@ -458,6 +443,66 @@ export function CostEstimatorWizard() {
     }
   }
 
+  const getLayerOptimizationSuggestions = (layer: BowLayer) => {
+    const usageSummary = calculateRibbonUsageSummary(
+      layer.yardsUsed,
+      layer.ribbonYards,
+      layer.loops,
+      layer.loopLength,
+      layer.streamers,
+      layer.streamerLength
+    )
+    return usageSummary.optimizationSuggestions
+  }
+
+  const applyOptimizationSuggestion = (layerId: string, suggestion: OptimizationSuggestion) => {
+    setLayers(layers.map(layer => {
+      if (layer.id === layerId) {
+        const updatedLayer = { ...layer }
+        
+        // Apply the suggested change
+        switch (suggestion.type) {
+          case 'loops':
+            updatedLayer.loops = suggestion.suggestedValue
+            break
+          case 'loopLength':
+            updatedLayer.loopLength = suggestion.suggestedValue
+            break
+          case 'streamers':
+            updatedLayer.streamers = suggestion.suggestedValue
+            break
+          case 'streamerLength':
+            updatedLayer.streamerLength = suggestion.suggestedValue
+            break
+        }
+        
+        // Recalculate yards used and total cost
+        const totalInches = (updatedLayer.loops * 2 * updatedLayer.loopLength) + 
+                           (updatedLayer.streamers * updatedLayer.streamerLength)
+        const yardsUsed = calculateYardsUsed(
+          updatedLayer.loops,
+          updatedLayer.loopLength,
+          updatedLayer.streamers,
+          updatedLayer.streamerLength
+        )
+        const totalCost = yardsUsed * updatedLayer.costPerYard
+        
+        return {
+          ...updatedLayer,
+          totalInches,
+          yardsUsed,
+          totalCost
+        }
+      }
+      return layer
+    }))
+    
+    toast({
+      title: "Optimization Applied!",
+      description: `Applied ${suggestion.type} optimization: ${suggestion.currentValue} → ${suggestion.suggestedValue}`,
+    })
+  }
+
     const renderStep1 = () => (
     <div className="space-y-6">
       {/* Header */}
@@ -517,7 +562,7 @@ export function CostEstimatorWizard() {
             </div>
             
             <div className="text-xs text-muted-foreground text-center">
-              Layer 1: {layers[0]?.ribbonType} • ${layers[0]?.ribbonCost} • {layers[0]?.ribbonYards} yards
+              Layer 1: {layers[0]?.ribbonType} {layers[0]?.designType && layers[0]?.designType !== "Solid" && `${layers[0]?.designType}`} • ${layers[0]?.ribbonCost} • {layers[0]?.ribbonYards} yards • ${layers[0]?.costPerYard.toFixed(2)}/yd
             </div>
           </div>
         </div>
@@ -611,12 +656,30 @@ export function CostEstimatorWizard() {
                       className="w-4 h-4 rounded-full border border-gray-300"
                       style={{ backgroundColor: layer.color }}
                     />
-                    <h4 className="text-lg font-semibold">Layer {index + 1}</h4>
-                    {layer.ribbonType && (
-                      <Badge variant="outline" className="text-xs">
-                        {layer.ribbonType}
-                      </Badge>
-                    )}
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-lg font-semibold">Layer {index + 1}</h4>
+                      <div className="text-sm text-muted-foreground truncate">
+                        {layer.ribbonType && layer.designType && layer.designType !== "Solid" ? (
+                          `${layer.ribbonType} ${layer.designType} • $${layer.costPerYard.toFixed(2)}/yd`
+                        ) : layer.ribbonType ? (
+                          `${layer.ribbonType} • $${layer.costPerYard.toFixed(2)}/yd`
+                        ) : (
+                          "Select ribbon details"
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      {layer.ribbonType && (
+                        <Badge variant="outline" className="text-xs">
+                          {layer.ribbonType}
+                        </Badge>
+                      )}
+                      {layer.designType && layer.designType !== "Solid" && (
+                        <Badge variant="secondary" className="text-xs">
+                          {layer.designType}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {layers.length > 1 && (
@@ -673,6 +736,28 @@ export function CostEstimatorWizard() {
                           )}
                         </div>
 
+                        {/* Design Type */}
+                        <div>
+                          <Label className="text-sm font-medium mb-2 block">
+                            Design Pattern
+                          </Label>
+                          <Select
+                            value={layer.designType}
+                            onValueChange={(value) => updateLayer(layer.id, 'designType', value)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select design pattern" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DesignTypeOptions.map((type) => (
+                                <SelectItem key={type} value={type}>
+                                  {type}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
                         {/* Color Selection */}
                         <div>
                           <Label className="text-sm font-medium mb-2 block">
@@ -720,6 +805,19 @@ export function CostEstimatorWizard() {
                               onChange={(e) => updateLayer(layer.id, 'ribbonCost', parseFloat(e.target.value) || 0)}
                               className="text-base"
                             />
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {[2.99, 3.99, 4.99, 5.99, 7.99, 9.99, 12.99].map((cost) => (
+                                <Button
+                                  key={cost}
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => updateLayer(layer.id, 'ribbonCost', cost)}
+                                  className="h-6 px-2 text-xs"
+                                >
+                                  ${cost}
+                                </Button>
+                              ))}
+                            </div>
                           </div>
                           
                           <div>
@@ -736,6 +834,19 @@ export function CostEstimatorWizard() {
                               onChange={(e) => updateLayer(layer.id, 'ribbonYards', parseFloat(e.target.value) || 0)}
                               className="text-base"
                             />
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {[5, 10, 20, 25, 30, 50, 100].map((yards) => (
+                                <Button
+                                  key={yards}
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => updateLayer(layer.id, 'ribbonYards', yards)}
+                                  className="h-6 px-2 text-xs"
+                                >
+                                  {yards}y
+                                </Button>
+                              ))}
+                            </div>
                           </div>
                         </div>
 
@@ -913,6 +1024,51 @@ export function CostEstimatorWizard() {
                             <span className="text-blue-600 dark:text-blue-400">Bows per roll: {Math.floor(layer.ribbonYards / layer.yardsUsed)}</span>
                             <span className="text-blue-600 dark:text-blue-400">Efficiency: {layer.ribbonYards / layer.yardsUsed >= 25 ? 'Excellent' : layer.ribbonYards / layer.yardsUsed >= 20 ? 'Good' : 'Poor'}</span>
                           </div>
+                          
+                          {/* Optimization Suggestions */}
+                          {(() => {
+                            const suggestions = getLayerOptimizationSuggestions(layer)
+                            if (suggestions.length > 0) {
+                              return (
+                                <div className="space-y-2 mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                                  <div className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                                    🎯 Optimization Suggestions
+                                  </div>
+                                                                     {suggestions.slice(0, 2).map((suggestion, index) => (
+                                     <div 
+                                       key={index}
+                                       className={`text-xs p-2 rounded border ${
+                                         suggestion.priority === 'high' 
+                                           ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800' 
+                                           : 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'
+                                       }`}
+                                     >
+                                       <div className="font-medium">
+                                         {suggestion.type === 'loops' && `Loops: ${suggestion.currentValue} → ${suggestion.suggestedValue}`}
+                                         {suggestion.type === 'loopLength' && `Loop Length: ${suggestion.currentValue}" → ${suggestion.suggestedValue}"`}
+                                         {suggestion.type === 'streamers' && `Streamers: ${suggestion.currentValue} → ${suggestion.suggestedValue}`}
+                                         {suggestion.type === 'streamerLength' && `Streamer Length: ${suggestion.currentValue}" → ${suggestion.suggestedValue}"`}
+                                       </div>
+                                       <div className="text-xs opacity-90 mb-2">
+                                         {suggestion.improvement} (+{suggestion.bowsPerRollIncrease} bows)
+                                       </div>
+                                       <Button
+                                         size="sm"
+                                         variant="outline"
+                                         className="w-full h-6 text-xs"
+                                         onClick={() => applyOptimizationSuggestion(layer.id, suggestion)}
+                                       >
+                                         Apply This Change
+                                       </Button>
+                                     </div>
+                                   ))}
+                                </div>
+                              )
+                            }
+                            return null
+                          })()}
+                          
+                          {/* Legacy Efficiency Messages */}
                           {(layer.ribbonYards - layer.yardsUsed) > 2 && (
                             <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 p-2 rounded border border-red-200 dark:border-red-800">
                               ⚠️ High waste! Consider making {Math.floor((layer.ribbonYards - layer.yardsUsed) / layer.yardsUsed)} more small bows
@@ -1017,6 +1173,66 @@ export function CostEstimatorWizard() {
         </div>
       </motion.div>
 
+      {/* Optimization Summary */}
+      {(() => {
+        const allSuggestions = layers.flatMap(layer => 
+          getLayerOptimizationSuggestions(layer).map(suggestion => ({
+            ...suggestion,
+            layerIndex: layers.indexOf(layer) + 1,
+            layerId: layer.id
+          }))
+        ).filter(suggestion => suggestion.priority === 'high')
+        
+        if (allSuggestions.length > 0) {
+          return (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.5 }}
+              className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 rounded-lg border border-amber-200 dark:border-amber-800"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm">🎯</span>
+                </div>
+                <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-200">
+                  High-Impact Optimization Opportunities
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {allSuggestions.slice(0, 3).map((suggestion, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-white/50 dark:bg-gray-800/50 rounded border">
+                    <div className="flex-1">
+                      <div className="text-sm font-medium">
+                        Layer {suggestion.layerIndex}: {suggestion.type === 'loops' && `${suggestion.currentValue} → ${suggestion.suggestedValue} loops`}
+                        {suggestion.type === 'loopLength' && `${suggestion.currentValue}" → ${suggestion.suggestedValue}" loops`}
+                        {suggestion.type === 'streamers' && `${suggestion.currentValue} → ${suggestion.suggestedValue} streamers`}
+                        {suggestion.type === 'streamerLength' && `${suggestion.currentValue}" → ${suggestion.suggestedValue}" streamers`}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        +{suggestion.bowsPerRollIncrease} bows per roll
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="ml-2"
+                      onClick={() => applyOptimizationSuggestion(suggestion.layerId, suggestion)}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                These changes could significantly improve your ribbon efficiency and increase bows per roll.
+              </p>
+            </motion.div>
+          )
+        }
+        return null
+      })()}
+
 
 
       {/* Bow Design Summary */}
@@ -1035,18 +1251,36 @@ export function CostEstimatorWizard() {
             className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-lg border border-blue-200 dark:border-blue-800"
           >
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div 
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold border border-gray-300"
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold border border-gray-300 flex-shrink-0"
                   style={{ backgroundColor: layer.color }}
                 >
                   {index + 1}
                 </div>
-                <h3 className="text-lg font-semibold">Layer {index + 1}</h3>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold">Layer {index + 1}</h3>
+                  <div className="text-sm text-muted-foreground truncate">
+                    {layer.ribbonType && layer.designType && layer.designType !== "Solid" ? (
+                      `${layer.ribbonType} ${layer.designType} ribbon`
+                    ) : layer.ribbonType ? (
+                      `${layer.ribbonType} ribbon`
+                    ) : (
+                      "Unnamed ribbon"
+                    )}
+                  </div>
+                </div>
               </div>
-              <Badge variant="outline" className="text-sm">
-                {layer.ribbonType || "Unnamed Ribbon"}
-              </Badge>
+              <div className="flex gap-1 flex-shrink-0">
+                <Badge variant="outline" className="text-sm">
+                  {layer.ribbonType || "Unnamed Ribbon"}
+                </Badge>
+                {layer.designType && layer.designType !== "Solid" && (
+                  <Badge variant="secondary" className="text-sm">
+                    {layer.designType}
+                  </Badge>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1060,6 +1294,10 @@ export function CostEstimatorWizard() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Type:</span>
                     <span className="font-medium">{layer.ribbonType || "Not specified"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Design:</span>
+                    <span className="font-medium">{layer.designType || "Solid"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Cost:</span>

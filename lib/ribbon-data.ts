@@ -1,5 +1,26 @@
 // Ribbon inventory data service - in a real app this would come from an API/database
 
+/*
+CRAFT OUTLET RIBBON CATEGORIZATION ANALYSIS
+==========================================
+
+Based on Craft Outlet's actual ribbon collection structure, here are the most important fields:
+
+PRIMARY FILTERS (Most Important for Users):
+1. Roll Length - Physical measurement (50 yards, 25 yards, etc.)
+2. Design Type - Pattern/Visual (Solid, Floral, Plaid, etc.)
+3. Ribbon Type - Material (Satin, Grosgrain, Velvet, etc.)
+4. Brand - Manufacturer (Craft Outlet, etc.)
+
+SECONDARY FIELDS (Supporting):
+5. Colors - Visual identification
+6. Theme - Seasonal/Thematic (Holiday, Wedding, etc.)
+7. Width - Physical measurement
+8. Wired - Functional property
+
+This prioritization matches how users actually search and filter ribbons on Craft Outlet.
+*/
+
 export interface RibbonInventoryRecord {
   ribbonId: string;
   ribbonType: string;       // e.g., 'Grosgrain', 'Satin', 'Velvet'
@@ -21,13 +42,34 @@ export interface RibbonInventoryRecord {
   imageUrl?: string;        // URL to ribbon image
 }
 
-// Type-ahead dropdown possible values
+// Type-ahead dropdown possible values - aligned with Craft Outlet categories
 export const RibbonTypeOptions = [
-  'Burlap & Jute','Canvas','Cotton','Denim','Dupioni','Flannel',
-  'Flocked','Fur','Glitter','Grosgrain','Lace','Metallic Foil',
-  'Metallic Lamé','Organza','Poly Mesh','Sackcloth & Linen',
-  'Satin','Sheer','Taffeta','Tinsel','Translucent PVC','Velvet',
-  'Water Resistant','Webbing'
+  'Satin',
+  'Grosgrain', 
+  'Velvet',
+  'Organza',
+  'Taffeta',
+  'Cotton',
+  'Lace',
+  'Metallic Foil',
+  'Metallic Lamé',
+  'Glitter',
+  'Burlap & Jute',
+  'Canvas',
+  'Denim',
+  'Dupioni',
+  'Flannel',
+  'Flocked',
+  'Fur',
+  'Poly Mesh',
+  'Sackcloth & Linen',
+  'Sheer',
+  'Tinsel',
+  'Translucent PVC',
+  'Water Resistant',
+  'Webbing',
+  'Wired',
+  'Other'
 ];
 
 export const WidthOptions = [
@@ -37,10 +79,28 @@ export const WidthOptions = [
 export const RollLengthOptions = [5, 10, 20, 25, 30, 50, 100, 500];
 
 export const DesignTypeOptions = [
-  'Animal Print','Basket Weave','Camouflage','Check','Chevron',
-  'Damask','Embroidered','Floral','Geometric','Harlequin',
-  'Houndstooth','Marble','Ombre','Plaid','Polka Dot','Quatrefoil',
-  'Seasonal Print','Solid','Stripes','Text','Two Tone','Windowpane'
+  'Solid',
+  'Check',
+  'Floral',
+  'Plaid',
+  'Polka Dot',
+  'Seasonal Print',
+  'Stripes',
+  'Text',
+  'Windowpane',
+  'Animal Print',
+  'Basket Weave',
+  'Camouflage',
+  'Chevron',
+  'Damask',
+  'Embroidered',
+  'Geometric',
+  'Harlequin',
+  'Houndstooth',
+  'Marble',
+  'Ombre',
+  'Quatrefoil',
+  'Two Tone'
 ];
 
 export const ThemeOptions = [

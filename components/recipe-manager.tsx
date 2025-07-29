@@ -30,33 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { toast } from "@/components/ui/use-toast"
 import { useRecipes, useBows, useRibbons } from "@/hooks/use-api-data"
-
-// Constants for ribbon options
-const RibbonTypeOptions = [
-  'Burlap & Jute','Canvas','Cotton','Denim','Dupioni','Flannel',
-  'Flocked','Fur','Glitter','Grosgrain','Lace','Metallic Foil',
-  'Metallic Lamé','Organza','Poly Mesh','Sackcloth & Linen',
-  'Satin','Sheer','Taffeta','Tinsel','Translucent PVC','Velvet',
-  'Water Resistant','Webbing'
-];
-
-const WidthOptions = [
-  0.625, 0.875, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0
-];
-
-const RollLengthOptions = [5, 10, 20, 25, 30, 50, 100, 500];
-
-const DesignTypeOptions = [
-  'Animal Print','Basket Weave','Camouflage','Check','Chevron',
-  'Damask','Embroidered','Floral','Geometric','Harlequin',
-  'Houndstooth','Marble','Ombre','Plaid','Polka Dot','Quatrefoil',
-  'Seasonal Print','Solid','Stripes','Text','Two Tone','Windowpane'
-];
-
-const ColorOptions = [
-  'Beige','Black','Blue','Brown','Gold','Green','Grey','Orange',
-  'Pink','Purple','Red','Silver','White','Yellow','Iridescent'
-];
+import { RibbonTypeOptions, DesignTypeOptions, WidthOptions, RollLengthOptions, ColorOptions } from "@/lib/ribbon-data"
 
 // Type definitions
 interface BowRecipe {

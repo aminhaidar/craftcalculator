@@ -76,6 +76,34 @@ export async function PUT(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const body = await request.json()
+    const bow = await prisma.bow.update({
+      where: { id },
+      data: body,
+      include: {
+        materials: {
+          include: {
+            ribbon: true
+          }
+        }
+      }
+    })
+    return NextResponse.json(bow)
+  } catch (error) {
+    console.error('Error updating bow:', error)
+    return NextResponse.json(
+      { error: 'Failed to update bow' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

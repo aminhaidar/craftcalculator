@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { calculateRibbonUsageSummary } from "@/lib/services/cost-calculator"
+import { ImageUpload } from "@/components/image-upload"
 
 interface BowDetailPageProps {
   bowId: string
@@ -22,6 +23,7 @@ interface BowData {
   id: string
   name: string
   description: string
+  image?: string | null
   totalCost: number
   targetPrice: number
   profit: number
@@ -43,6 +45,7 @@ export function BowDetailPage({ bowId }: BowDetailPageProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isUpdatingImage, setIsUpdatingImage] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -96,6 +99,66 @@ export function BowDetailPage({ bowId }: BowDetailPageProps) {
       })
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  const handleImageUpload = async (imageUrl: string) => {
+    if (!bow) return
+    
+    setIsUpdatingImage(true)
+    try {
+      const response = await fetch(`/api/bows/${bow.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ image: imageUrl }),
+      })
+
+      if (response.ok) {
+        setBow(prev => prev ? { ...prev, image: imageUrl } : null)
+      } else {
+        throw new Error('Failed to update image')
+      }
+    } catch (error) {
+      console.error('Error updating image:', error)
+      toast({
+        title: "Error updating image",
+        description: "Please try again or check your connection.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsUpdatingImage(false)
+    }
+  }
+
+  const handleImageRemove = async () => {
+    if (!bow) return
+    
+    setIsUpdatingImage(true)
+    try {
+      const response = await fetch(`/api/bows/${bow.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ image: null }),
+      })
+
+      if (response.ok) {
+        setBow(prev => prev ? { ...prev, image: null } : null)
+      } else {
+        throw new Error('Failed to remove image')
+      }
+    } catch (error) {
+      console.error('Error removing image:', error)
+      toast({
+        title: "Error removing image",
+        description: "Please try again or check your connection.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsUpdatingImage(false)
     }
   }
 
@@ -155,6 +218,64 @@ export function BowDetailPage({ bowId }: BowDetailPageProps) {
             <Calculator className="h-4 w-4 mr-2" />
             Recalculate
           </Button>
+        </div>
+      </div>
+
+      {/* Bow Image */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1">
+          <ImageUpload
+            currentImage={bow.image}
+            onImageUpload={handleImageUpload}
+            onImageRemove={handleImageRemove}
+            className="w-full"
+          />
+        </div>
+        <div className="lg:col-span-2">
+          {/* Bow Details Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                <Package className="h-4 w-4 sm:h-5 sm:w-5" />
+                Bow Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Category</p>
+                  <p className="font-medium">{bow.category}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Layers</p>
+                  <p className="font-medium">{bow.layers}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge variant={bow.status === 'excellent' ? 'default' : 
+                                 bow.status === 'good' ? 'secondary' : 'destructive'}>
+                    {bow.status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Created</p>
+                  <p className="font-medium">{new Date(bow.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+              {bow.tags.length > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Tags</p>
+                  <div className="flex flex-wrap gap-1">
+                    {bow.tags.map((tag, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 

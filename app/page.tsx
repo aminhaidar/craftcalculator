@@ -87,6 +87,17 @@ export default function HomePage() {
                 recentBows.map((bow, index) => (
                   <Link key={bow.id} href={`/bows/${bow.id}`}>
                     <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer">
+                      {/* Bow Image */}
+                      {bow.image && (
+                        <div className="mb-3 aspect-video rounded-lg overflow-hidden">
+                          <img 
+                            src={bow.image} 
+                            alt={bow.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                      
                       <div className="flex items-center gap-3 mb-3">
                         <div className={`w-8 h-8 bg-gradient-to-r ${
                           index === 0 ? 'from-pink-500 to-purple-500' :
